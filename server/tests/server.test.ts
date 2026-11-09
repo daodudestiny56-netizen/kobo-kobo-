@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { loadConfig, productionProblems } from '../src/config';
-import { openDb } from '../src/db';
 import { buildServer } from '../src/server';
+import { makeDeps } from './helpers';
 import { sweepWindow, sweepDateOf, sweepCutoff } from '../src/time';
 
-const mk = () => buildServer({ db: openDb(), config: loadConfig({ LOG_LEVEL: 'silent' }), clock: () => new Date() });
+const mk = () => buildServer(makeDeps());
 
 describe('server', () => {
   it('answers /healthz with 200', async () => {
