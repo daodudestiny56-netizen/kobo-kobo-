@@ -79,6 +79,7 @@ export interface BankClient {
   sendIntra(req: TransferRequest): Promise<SendResult>;                // never auto-retried
   getTransfer(reference: string): Promise<Transfer | null>;            // null = bank has no record
   awaitFinal(reference: string, opts?: AwaitOptions): Promise<Transfer | null>;
+  listTransactions(opts?: { sinceIso?: string }): Promise<BankTransaction[]>;  // team-wide, newest first
   listAccountTransactions(account: string, opts?: { sinceIso?: string }): Promise<BankTransaction[]>;
 }
 

@@ -121,15 +121,14 @@ export class HttpBankClient implements BankClient {
     }
   }
 
-  /** The bank ignores the account filter, so we page team-wide (newest first) and filter here. */
-  async listAccountTransactions(account: string, opts: { sinceIso?: string } = {}): Promise<BankTransaction[]> {
+  /** Team-wide (the bank ignores the account filter), newest first, stops paging once older than sinceIso. */
+  async listTransactions(opts: { sinceIso?: string } = {}): Promise<BankTransaction[]> {
     const out: BankTransaction[] = [];
     for (let page = 1; page <= 20; page++) {
       const res = await this.http.get(`/transactions?page=${page}&per_page=100`);
       if (res.status >= 400) fail(res);
       const rows: any[] = res.body.data ?? [];
       for (const r of rows) {
-        if (r.account !== account) continue;
         if (opts.sinceIso && r.at < opts.sinceIso) continue;
         out.push({
           reference: r.reference, account: r.account, type: r.type, direction: r.direction,
@@ -142,5 +141,9 @@ export class HttpBankClient implements BankClient {
       if (opts.sinceIso && rows[rows.length - 1].at < opts.sinceIso) break;
     }
     return out;
+  }
+
+  async listAccountTransactions(account: string, opts: { sinceIso?: string } = {}): Promise<BankTransaction[]> {
+    return (await this.listTransactions(opts)).filter((r) => r.account === account);
   }
 }
