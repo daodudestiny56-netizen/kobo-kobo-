@@ -1,0 +1,51 @@
+# `docker compose up --build` starts Postgres and core (migrations run on boot, mock bank, console SMS/voice).
+# Just the database for local `npm run dev`: `docker compose up -d db`.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: kobo
+    ports:
+      - "5432:5432"
+    volumes:
+      - kobo-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kobo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  core:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}   # "production" refuses to boot with empty tokens, no PIN pepper or the mock bank
+      DATABASE_URL: postgres://postgres:postgres@db:5432/kobo
+      RUN_MIGRATIONS: "true"
+      PORT: "3000"
+      # Shared secrets: set real values anywhere but a laptop. Empty = open (dev only).
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-}
+      WEBHOOK_TOKEN: ${WEBHOOK_TOKEN:-}
+      PIN_PEPPER: ${PIN_PEPPER:-dev-only-pepper}
+      # Bank: mock keeps everything in memory. Use http with the Rails base URL for the real executor.
+      EXECUTOR_MODE: ${EXECUTOR_MODE:-mock}
+      MOCK_DEFAULT_BALANCE_NAIRA: ${MOCK_DEFAULT_BALANCE_NAIRA:-500000}
+      RAILS_BASE_URL: ${RAILS_BASE_URL:-http://host.docker.internal:3001}
+      RAILS_SERVICE_TOKEN: ${RAILS_SERVICE_TOKEN:-}
+      GUARD_HOLD_ABOVE_NAIRA: ${GUARD_HOLD_ABOVE_NAIRA:-0}
+      SMS_PROVIDER: ${SMS_PROVIDER:-console}
+      VOICE_PROVIDER: ${VOICE_PROVIDER:-console}
+      AT_USERNAME: ${AT_USERNAME:-sandbox}
+      AT_API_KEY: ${AT_API_KEY:-}
+      SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-true}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  kobo-pg:
