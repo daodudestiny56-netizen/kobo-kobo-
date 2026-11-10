@@ -121,15 +121,14 @@ export class HttpBankClient implements BankClient {
     }
   }
 
-  /** The bank ignores the account filter, so we page team-wide (newest first) and filter here. */
-  async listAccountTransactions(account: string, opts: { sinceIso?: string } = {}): Promise<BankTransaction[]> {
+  /** Team-wide (the bank ignores the account filter), newest first, stops paging once older than sinceIso. */
+  async listTransactions(opts: { sinceIso?: string } = {}): Promise<BankTransaction[]> {
     const out: BankTransaction[] = [];
     for (let page = 1; page <= 20; page++) {
       const res = await this.http.get(`/transactions?page=${page}&per_page=100`);
       if (res.status >= 400) fail(res);
       const rows: any[] = res.body.data ?? [];
       for (const r of rows) {
-        if (r.account !== account) continue;
         if (opts.sinceIso && r.at < opts.sinceIso) continue;
         out.push({
           reference: r.reference, account: r.account, type: r.type, direction: r.direction,
@@ -144,15 +143,7 @@ export class HttpBankClient implements BankClient {
     return out;
   }
 
-  /** Body shape and response fields are NOT confirmed against the real bank yet; the mapping is deliberately tolerant. */
-  async verifyIdentity(kind: "bvn" | "nin", number: string): Promise<IdentityRecord> {
-    const res = await this.http.post(`/identity/${kind}/verify`, { [kind]: number });
-    if (res.status === 422 || res.status === 404) return { verified: false, fullName: null, dob: null };
-    if (res.status >= 400) fail(res);
-    const d = res.body.data ?? {};
-    const parts = [d.first_name ?? d.firstName, d.middle_name ?? d.middleName, d.last_name ?? d.lastName ?? d.surname];
-    const fullName: string | null = d.full_name ?? d.fullName ?? d.name ?? (parts.filter(Boolean).join(" ") || null);
-    const verified = (d.verified ?? d.match ?? true) !== false && !!fullName;
-    return { verified, fullName, dob: d.dob ?? d.date_of_birth ?? null };
+  async listAccountTransactions(account: string, opts: { sinceIso?: string } = {}): Promise<BankTransaction[]> {
+    return (await this.listTransactions(opts)).filter((r) => r.account === account);
   }
 }
