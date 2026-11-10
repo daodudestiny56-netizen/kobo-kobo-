@@ -21,6 +21,10 @@ export class BankHttp {
     return this.send("POST", path, body, headers, 0);
   }
 
+  del(path: string): Promise<HttpResult> {
+    return this.send("DELETE", path, undefined, {}, 0);
+  }
+
   private async send(
     method: string,
     path: string,

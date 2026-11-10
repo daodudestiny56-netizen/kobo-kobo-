@@ -1,12 +1,15 @@
 import Fastify from "fastify";
 import { db, migrate } from "./db.js";
 import { startCollector } from "./collector.js";
+import { webhookPlugin, ensureWebhook } from "./webhooks/receiver.js";
 
 const app = Fastify({ logger: true });
 
 const applied = migrate();
 app.log.info({ applied }, "migrations applied");
-if (process.env.BANK_API_KEY || process.env.GATEWAY_KEY) startCollector();
+const hasKey = !!(process.env.BANK_API_KEY || process.env.GATEWAY_KEY);
+if (hasKey) startCollector();
+await app.register(webhookPlugin);
 
 app.get("/healthz", async () => {
   db.prepare("SELECT 1").get();
@@ -21,7 +24,12 @@ app.get("/", async (_req, reply) =>
 
 const port = Number(process.env.PORT ?? 8080);
 
-app.listen({ host: "0.0.0.0", port }).catch((err) => {
-  app.log.error(err);
-  process.exit(1);
-});
+app
+  .listen({ host: "0.0.0.0", port })
+  .then(() => {
+    if (hasKey) ensureWebhook().catch((e) => app.log.warn(`webhook registration failed: ${e.message}`));
+  })
+  .catch((err) => {
+    app.log.error(err);
+    process.exit(1);
+  });
