@@ -87,6 +87,7 @@ export interface BankClient {
   listWebhooks(): Promise<{ id: string; url: string }[]>;
   deleteWebhook(id: string): Promise<void>;
   registerWebhook(url: string, events: string[]): Promise<{ id: string; secret: string }>;
+  adminReset(): Promise<void>;
 }
 
 export class BankError extends Error {

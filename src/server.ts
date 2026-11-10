@@ -3,6 +3,8 @@ import { db, migrate } from "./db.js";
 import { startCollector } from "./collector.js";
 import { webhookPlugin, ensureWebhook } from "./webhooks/receiver.js";
 import { onboardingRoutes } from "./onboarding/routes.js";
+import { demoRoutes } from "./demo/routes.js";
+import { seedIfEmpty } from "./demo/reset.js";
 
 const app = Fastify({ logger: true, trustProxy: true });
 
@@ -12,6 +14,7 @@ const hasKey = !!(process.env.BANK_API_KEY || process.env.GATEWAY_KEY);
 if (hasKey) startCollector();
 await app.register(webhookPlugin);
 await app.register(onboardingRoutes);
+await app.register(demoRoutes);
 
 app.get("/healthz", async () => {
   db.prepare("SELECT 1").get();
@@ -28,8 +31,10 @@ const port = Number(process.env.PORT ?? 8080);
 
 app
   .listen({ host: "0.0.0.0", port })
-  .then(() => {
-    if (hasKey) ensureWebhook().catch((e) => app.log.warn(`webhook registration failed: ${e.message}`));
+  .then(async () => {
+    if (!hasKey) return;
+    if (process.env.DEMO_MODE === "1") await seedIfEmpty().catch((e) => app.log.warn(`demo seed failed: ${e.message}`));
+    await ensureWebhook().catch((e) => app.log.warn(`webhook registration failed: ${e.message}`));
   })
   .catch((err) => {
     app.log.error(err);
