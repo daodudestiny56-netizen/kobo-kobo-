@@ -12,7 +12,7 @@ test("onboarding creates a simulated pension account atomically", async () => {
       import("../src/pension/onboarding.js"),
     ]);
 
-  assert.equal(migrate(), 3);
+  assert.equal(migrate(), 4);
   assert.equal(migrate(), 0);
   let generated = 0;
   const pins = ["PEN000000000001", "PEN000000000001", "PEN000000000002"];

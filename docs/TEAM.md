@@ -1,7 +1,7 @@
 # Kobo Kobo engine: what each teammate needs
 
-Server: `server/` (Node 20+, TypeScript, Fastify, SQLite). `cd server && npm ci && npm test && npm run dev`.
-Seed the seven demo traders: `npm run seed` (synthetic data only), or `POST /api/v1/demo/reset`.
+The deployed app is one process: root `src/server.ts` mounts the engine routes and scheduler from `server/src/integration/root-runtime.ts`, using the root SQLite database and shared sandbox bank client. Run root checks with `npm ci && npm test && npm run build`; engine typechecks/tests are `cd server && npm ci && npm run typecheck && npm test`.
+`server/src/index.ts` remains a standalone engine test harness using `SimulatedBank`; do not deploy it in place of the root app. Seed the seven demo traders only through the integrated app's `POST /api/v1/demo/reset`.
 
 ## Environment
 
@@ -9,7 +9,7 @@ Seed the seven demo traders: `npm run seed` (synthetic data only), or `POST /api
 |---|---|
 | `DB_PATH` | SQLite file (`/data/kobo.sqlite` in the container; mount a volume) |
 | `OPS_TOKEN` | Secret for `/api/v1/ops/*` and `/api/v1/demo/*`. Production refuses to boot without it. |
-| `DEMO_MODE` | `true` enables the demo routes and demo sign-up. |
+| `DEMO_MODE` | `true` enables demo routes and demo sign-up. Defaults off in production; demo routes also require the ops token. |
 | `DEMO_BANK_ACCOUNTS` | Optional, comma-separated: bank accounts for the seven demo traders (the sandbox individuals). |
 | `GUARD_HOLD_ABOVE_NAIRA` | Placeholder guard: hold any single credit at or above this amount. Demo uses `1000000`. |
 | `SCHEDULER_ENABLED`, `SWEEP_CRON`, `SWEEP_RETRY_CRON`, `REQUERY_CRON` | Defaults: 23:00 and 23:30 WAT, requery every minute. |
@@ -18,19 +18,19 @@ Never commit `GATEWAY_KEY`, the webhook secret, kubeconfig or `.env`.
 
 ## Abiodun: bank client, webhooks, onboarding
 
-1. **`BankPort`** (`src/bank/port.ts`) is the only thing the engine knows about the bank. Implement it with the real client and swap it into `src/index.ts` where `SimulatedBank` is created.
+1. **`BankPort`** (`server/src/bank/port.ts`) is the only thing the engine knows about the bank. The deployed app uses `server/src/integration/root-bank.ts` to adapt the root `HttpBankClient`; the adapter uses the shared limiter, preserves idempotency, and maps unknown transfer outcomes to requery rather than a resend. `server/src/index.ts` uses `SimulatedBank` only in the standalone test harness.
    - `transfer` must be idempotent on `idempotencyKey` and throw `BankError('TIMEOUT')` on a 504. The engine then requeries and never blind-resends.
    - `getTransfer` returns `null` only for HTTP 404 (the bank has no record). Only then does the engine resend, with the same key and reference.
    - `BankError` codes map every sandbox failure; see the comments in `port.ts`.
    - `SimulatedBank` reproduces the sandbox trigger digits and DUP- rule. Run `npm test` against your client's mapping if you can.
 2. **Rate budget:** the engine runs at most 3 merchants at once (`SWEEP_BATCH_CONCURRENCY`). Put your shared `limiter.acquire()` inside the client so bank and model calls share one 40 per minute budget.
-3. **Webhooks** (`POST /hooks/forge`, yours): verify the signature, then
+3. **Webhooks** (`POST /hooks/forge`): verify the signature, then
    - credit received: `recordInflow(deps, {merchantId, amount, channel, eventId, bankReference, settledAt})` (`src/inflows/service.ts`). It is idempotent on `eventId` and `bankReference`. Pass `counted: false` for loans, own transfers and reversals.
    - transfer result for a sweep: `applyResult(deps, sweepId, result)` (`src/sweeps/engine.ts`), find the sweep with `getSweepByReference`.
    - transfer result for a withdrawal: `applyWithdrawalResult(deps, id, result)` (`src/withdrawals/service.ts`).
-   All three are safe to call twice and out of order with the requery loop.
-4. **Onboarding:** the bank app's `src/onboarding/service.ts` runs registered `onOnboard(merchantId)` hooks inside its merchant/consent transaction. The engine hook registered by `src/server.ts` creates the simulated pension account and RSA PIN; a failure rolls the entire enrolment back. Its schema is in `src/migrations/0002_engine.ts`. In the standalone engine API, after the bank checks call `onboardMerchant(db, {...})` (`server/src/merchants/service.ts`), which creates its own pension account. `POST /api/v1/merchants` is a plain helper for that standalone server (open in demo mode, ops token otherwise).
-5. `productionProblems` in `src/config.ts` should also require your bank key and webhook secret.
+   The integrated runtime subscribes to transfer events and applies a fresh bank requery to matching sweep/withdrawal rows. Incoming sales remain sourced from the bank transaction poll. The updates are idempotent and share the same database as the sweep engine.
+4. **Onboarding:** the bank app's `src/onboarding/service.ts` runs registered `onOnboard(merchantId)` hooks inside its merchant/consent transaction. The hook registered by root `src/server.ts` creates the simulated pension account and RSA PIN; a failure rolls the entire enrolment back. The root migrations add the engine tables and shared inflow metadata, including `src/migrations/0011_engine_runtime.ts`. The `/api/v1/merchants` helper also creates its pension account in the same root database.
+5. Production startup requires `OPS_TOKEN` and `BANK_API_KEY` (or `GATEWAY_KEY`). The webhook secret is registered with the bank on boot and kept in memory; transaction polling and requery remain the recovery path if webhook registration is unavailable.
 
 ## Tomiwa: SweepGuard, SmartRate, message copy
 

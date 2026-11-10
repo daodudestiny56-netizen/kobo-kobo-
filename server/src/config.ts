@@ -30,13 +30,14 @@ export interface Config {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  const nodeEnv = env.NODE_ENV ?? 'development';
   return {
-    nodeEnv: env.NODE_ENV ?? 'development',
+    nodeEnv,
     port: int(env.PORT, 8080),
     logLevel: env.LOG_LEVEL ?? 'info',
     dbPath: env.DB_PATH ?? './data/kobo.sqlite',
     opsToken: env.OPS_TOKEN ?? '',
-    demoMode: bool(env.DEMO_MODE, true),
+    demoMode: bool(env.DEMO_MODE, nodeEnv !== 'production'),
     collectionAccount: env.COLLECTION_ACCOUNT ?? '0123456793',
     collectionLabel: 'Access ARM collection (simulated)',
     demoBankAccounts: (env.DEMO_BANK_ACCOUNTS ?? '').split(',').map((x) => x.trim()).filter(Boolean),
@@ -59,9 +60,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 }
 
 /** Misconfigurations that must stop a production boot. */
-export function productionProblems(c: Config): string[] {
+export function productionProblems(c: Config, env: NodeJS.ProcessEnv = process.env): string[] {
   if (c.nodeEnv !== 'production') return [];
   const p: string[] = [];
   if (!c.opsToken) p.push('OPS_TOKEN is empty: the ops dashboard and demo controls would be open to the internet.');
+  if (!(env.BANK_API_KEY || env.GATEWAY_KEY)) p.push('BANK_API_KEY (or GATEWAY_KEY) is empty: bank collection and transfers cannot run.');
   return p;
 }
