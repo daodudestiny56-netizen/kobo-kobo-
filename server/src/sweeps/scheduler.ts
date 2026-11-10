@@ -3,6 +3,7 @@ import type { Deps } from '../deps';
 import { toWatDate } from '../time';
 import { runBatch } from './batch';
 import { requeryDue } from './engine';
+import { requeryWithdrawalsDue } from '../withdrawals/service';
 
 /**
  * 23:00 WAT sweep, 23:30 re-run (it IS the retry for anything that did not finish), and a requery loop every
@@ -24,7 +25,7 @@ export function startScheduler(deps: Deps): () => void {
   const jobs = [
     cron.schedule(c.sweepCron, sweep, tz),
     cron.schedule(c.retryCron, sweep, tz),
-    cron.schedule(c.requeryCron, () => void requeryDue(deps).catch((e) => console.error('[scheduler] requery failed:', (e as Error).message))),
+    cron.schedule(c.requeryCron, () => void Promise.all([requeryDue(deps), requeryWithdrawalsDue(deps)]).catch((e) => console.error('[scheduler] requery failed:', (e as Error).message))),
   ];
   return () => jobs.forEach((j) => j.stop());
 }

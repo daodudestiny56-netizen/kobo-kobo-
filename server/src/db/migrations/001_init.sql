@@ -93,6 +93,7 @@ CREATE TABLE withdrawals (
   bank_reference      TEXT UNIQUE,
   last_error          TEXT,
   next_check_at       TEXT,
+  effective_at        TEXT NOT NULL,         -- the eligibility clock at request time (real time plus any demo offset)
   created_at          TEXT NOT NULL,
   updated_at          TEXT NOT NULL
 );
