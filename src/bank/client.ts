@@ -58,6 +58,12 @@ export class HttpBankClient implements BankClient {
     return { id: d.id, secret };
   }
 
+  /** Wipes the sandbox's volatile data. Webhook registrations go with it, so re-register afterwards. */
+  async adminReset(): Promise<void> {
+    const res = await this.http.post("/admin/reset", {}, { "Idempotency-Key": randomUUID() });
+    if (res.status >= 400) fail(res);
+  }
+
   async getBalanceKobo(account: string): Promise<Kobo> {
     const res = await this.http.get(`/accounts/${account}/balance`);
     if (res.status >= 400) fail(res);
