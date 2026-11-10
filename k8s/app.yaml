@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: app }
+  template:
+    metadata:
+      labels: { app: app }
+    spec:
+      # imagePullSecrets: [{ name: regcred }]   # uncomment if the ghcr package is private
+      containers:
+        - name: app
+          image: ghcr.io/timi-abiodun/kobo-kobo:v2
+          ports:
+            - containerPort: 8080
+          env:
+            - { name: PORT, value: "8080" }
+            - { name: BANK_BASE_URL, value: "http://bank-api.ingress-apisix.svc.cluster.local/v1" }
+            - { name: DB_PATH, value: "/data/kobo.sqlite" }
+            - { name: DEMO_MODE, value: "1" }
+          envFrom:
+            - secretRef: { name: huawei-gateway, optional: true }
+            - secretRef: { name: kobo-secrets }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          resources:
+            requests: { cpu: 100m, memory: 192Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app
+spec:
+  selector: { app: app }
+  ports:
+    - port: 80
+      targetPort: 8080

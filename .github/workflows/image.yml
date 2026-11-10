@@ -1,0 +1,4 @@
+on:
+  push:
+    branches: [main, chore/deploy-v3]
+  workflow_dispatch:
