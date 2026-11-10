@@ -1,0 +1,10 @@
+{
+  "name": "Kobo Kobo",
+  "short_name": "Kobo Kobo",
+  "description": "Pension that grows when your sales do.",
+  "start_url": "/home",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": []
+}
