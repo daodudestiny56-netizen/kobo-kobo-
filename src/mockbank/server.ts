@@ -4,6 +4,7 @@ import { ok, fail } from "./envelope.js";
 import { transferRoutes } from "./transfers.js";
 import { webhookRoutes } from "./webhooks.js";
 import { virtualRoutes } from "./virtual.js";
+import { identityRoutes } from "./identity.js";
 
 const KEY = process.env.MOCK_KEY ?? "mock-key";
 const app = Fastify({ logger: false });
@@ -35,6 +36,7 @@ app.register(
     await v1.register(transferRoutes);
     await v1.register(webhookRoutes);
     await v1.register(virtualRoutes);
+    await v1.register(identityRoutes);
 
     v1.get<{ Params: { n: string } }>("/accounts/:n/balance", async (req, reply) => {
       const a = accounts.get(req.params.n);

@@ -3,7 +3,7 @@ import { toKobo, toNaira } from "./money.js";
 import {
   BankError, BankNetworkError,
   type AwaitOptions, type BankClient, type BankTransaction, type Kobo,
-  type NameEnquiry, type ResolvedAccount, type SendResult, type Transfer, type TransferRequest,
+  type IdentityRecord, type NameEnquiry, type ResolvedAccount, type SendResult, type Transfer, type TransferRequest,
 } from "./types.js";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -52,6 +52,18 @@ export class HttpBankClient implements BankClient {
     if (res.status >= 400) fail(res);
     const d = res.body.data;
     return { ref: d.name_enquiry_ref, accountNumber: d.account_number, accountName: d.account_name, kycLevel: d.kyc_level ?? null, expiresAt: d.expires_at };
+  }
+
+  /** Body shape and response fields are NOT confirmed against the real bank yet; the mapping is deliberately tolerant. */
+  async verifyIdentity(kind: "bvn" | "nin", number: string): Promise<IdentityRecord> {
+    const res = await this.http.post(`/identity/${kind}/verify`, { [kind]: number });
+    if (res.status === 422 || res.status === 404) return { verified: false, fullName: null, dob: null };
+    if (res.status >= 400) fail(res);
+    const d = res.body.data ?? {};
+    const parts = [d.first_name ?? d.firstName, d.middle_name ?? d.middleName, d.last_name ?? d.lastName ?? d.surname];
+    const fullName: string | null = d.full_name ?? d.fullName ?? d.name ?? (parts.filter(Boolean).join(" ") || null);
+    const verified = (d.verified ?? d.match ?? true) !== false && !!fullName;
+    return { verified, fullName, dob: d.dob ?? d.date_of_birth ?? null };
   }
 
   async sendIntra(req: TransferRequest): Promise<SendResult> {

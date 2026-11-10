@@ -33,6 +33,8 @@ export type NameEnquiry = {
   expiresAt: string;
 };
 
+export type IdentityRecord = { verified: boolean; fullName: string | null; dob: string | null };
+
 /**
  * The CALLER persists this object before sending, and resends the identical
  * object on any retry. The bank compares the whole body for the same
@@ -81,6 +83,7 @@ export interface BankClient {
   awaitFinal(reference: string, opts?: AwaitOptions): Promise<Transfer | null>;
   listTransactions(opts?: { sinceIso?: string }): Promise<BankTransaction[]>;  // team-wide, newest first
   listAccountTransactions(account: string, opts?: { sinceIso?: string }): Promise<BankTransaction[]>;
+  verifyIdentity(kind: "bvn" | "nin", number: string): Promise<IdentityRecord>;
 }
 
 export class BankError extends Error {
