@@ -1,0 +1,146 @@
+import { BankHttp } from "./http.js";
+import { toKobo, toNaira } from "./money.js";
+import {
+  BankError, BankNetworkError,
+  type AwaitOptions, type BankClient, type BankTransaction, type Kobo,
+  type NameEnquiry, type ResolvedAccount, type SendResult, type Transfer, type TransferRequest,
+} from "./types.js";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function fail(res: { status: number; body: any }): never {
+  const e = res.body?.error ?? {};
+  throw new BankError(e.code ?? "UNKNOWN", e.message ?? `HTTP ${res.status}`, res.status, res.body?.request_id, e.field);
+}
+
+function mapTransfer(d: any): Transfer {
+  return {
+    reference: d.reference,
+    transactionId: d.transaction_id,
+    status: d.status,
+    amountKobo: toKobo(d.amount),
+    feeKobo: toKobo(d.fee ?? 0),
+    vatKobo: toKobo(d.vat ?? 0),
+    stampDutyKobo: toKobo(d.stamp_duty ?? 0),
+    totalDebitKobo: toKobo(d.total_debit ?? d.amount),
+    sourceAccount: d.source?.account_number,
+    destinationAccount: d.destination?.account_number,
+    sourceBalanceAfterKobo: toKobo(d.source?.balance_after ?? 0),
+    createdAt: d.created_at,
+    completedAt: d.completed_at ?? null,
+  };
+}
+
+export class HttpBankClient implements BankClient {
+  constructor(private http: BankHttp) {}
+
+  async getBalanceKobo(account: string): Promise<Kobo> {
+    const res = await this.http.get(`/accounts/${account}/balance`);
+    if (res.status >= 400) fail(res);
+    return toKobo(res.body.data.available_balance);
+  }
+
+  async resolveAccount(account: string, bankCode = "000014"): Promise<ResolvedAccount> {
+    const res = await this.http.get(`/accounts/resolve?account_number=${account}&bank_code=${bankCode}`);
+    if (res.status >= 400) fail(res);
+    const d = res.body.data;
+    return { accountNumber: d.account_number, accountName: d.account_name, bankName: d.bank_name, status: d.account_status };
+  }
+
+  async nameEnquiry(account: string): Promise<NameEnquiry> {
+    const res = await this.http.post("/transfers/intra/name-enquiry", { account_number: account });
+    if (res.status >= 400) fail(res);
+    const d = res.body.data;
+    return { ref: d.name_enquiry_ref, accountNumber: d.account_number, accountName: d.account_name, kycLevel: d.kyc_level ?? null, expiresAt: d.expires_at };
+  }
+
+  async sendIntra(req: TransferRequest): Promise<SendResult> {
+    if (!Number.isInteger(req.amountKobo) || req.amountKobo <= 0) throw new Error("amountKobo must be a positive integer");
+    if (req.reference.startsWith("DUP-")) throw new Error("reference must not start with DUP-");
+
+    let res;
+    try {
+      res = await this.http.post(
+        "/transfers/intra",
+        {
+          source_account: req.sourceAccount,
+          destination_account: req.destinationAccount,
+          name_enquiry_ref: req.nameEnquiryRef,
+          amount: toNaira(req.amountKobo),
+          narration: req.narration,
+          reference: req.reference,
+        },
+        { "Idempotency-Key": req.idempotencyKey }
+      );
+    } catch (e) {
+      if (e instanceof BankNetworkError) return { outcome: "unknown", reference: req.reference, reason: e.message };
+      throw e;
+    }
+
+    const code: string | undefined = res.body?.error?.code;
+    if (res.status === 200 || res.status === 201 || res.status === 202) {
+      const t = mapTransfer(res.body.data);
+      if (t.status === "successful") return { outcome: "settled", transfer: t };
+      if (t.status === "pending") return { outcome: "pending", transfer: t };
+      return { outcome: "unknown", reference: req.reference, reason: `unexpected status ${t.status}` };
+    }
+    // Anything that might have reached the bank is "unknown": requery, never resend.
+    if (res.status >= 500 || code === "TIMEOUT") {
+      return { outcome: "unknown", reference: req.reference, reason: `${res.status} ${code ?? ""} ${res.body?.request_id ?? ""}`.trim() };
+    }
+    if (code === "DUPLICATE_REQUEST") {
+      return { outcome: "unknown", reference: req.reference, reason: "duplicate: check the bank for this reference" };
+    }
+    return { outcome: "failed", code: code ?? "UNKNOWN", message: res.body?.error?.message ?? `HTTP ${res.status}` };
+  }
+
+  async getTransfer(reference: string): Promise<Transfer | null> {
+    const res = await this.http.get(`/transfers/${encodeURIComponent(reference)}`);
+    if (res.status === 404) return null;
+    if (res.status >= 400) fail(res);
+    return mapTransfer(res.body.data);
+  }
+
+  /** Polls until the status leaves "pending". Returns the last known state, which may still be
+   *  pending (or null) if maxWait runs out: the caller keeps the sweep UNKNOWN and requeries later. */
+  async awaitFinal(reference: string, opts: AwaitOptions = {}): Promise<Transfer | null> {
+    const maxWait = opts.maxWaitMs ?? 150_000;
+    let delay = opts.firstDelayMs ?? 2_000;
+    const start = Date.now();
+    let last: Transfer | null = null;
+    for (;;) {
+      try {
+        last = await this.getTransfer(reference);
+        if (last && last.status !== "pending") return last;
+      } catch (e) {
+        if (!(e instanceof BankNetworkError)) throw e;
+      }
+      if (Date.now() - start + delay > maxWait) return last;
+      await sleep(delay);
+      delay = Math.min(delay * 2, 15_000);
+    }
+  }
+
+  /** The bank ignores the account filter, so we page team-wide (newest first) and filter here. */
+  async listAccountTransactions(account: string, opts: { sinceIso?: string } = {}): Promise<BankTransaction[]> {
+    const out: BankTransaction[] = [];
+    for (let page = 1; page <= 20; page++) {
+      const res = await this.http.get(`/transactions?page=${page}&per_page=100`);
+      if (res.status >= 400) fail(res);
+      const rows: any[] = res.body.data ?? [];
+      for (const r of rows) {
+        if (r.account !== account) continue;
+        if (opts.sinceIso && r.at < opts.sinceIso) continue;
+        out.push({
+          reference: r.reference, account: r.account, type: r.type, direction: r.direction,
+          amountKobo: toKobo(r.amount), feeKobo: toKobo(r.fee ?? 0),
+          counterparty: r.counterparty_name ?? null, channel: r.channel ?? null, status: r.status, at: r.at,
+        });
+      }
+      const totalPages = res.body.meta?.total_pages ?? page;
+      if (rows.length === 0 || page >= totalPages) break;
+      if (opts.sinceIso && rows[rows.length - 1].at < opts.sinceIso) break;
+    }
+    return out;
+  }
+}
