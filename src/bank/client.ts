@@ -112,7 +112,10 @@ export class HttpBankClient implements BankClient {
           narration: req.narration,
           reference: req.reference,
         },
-        { "Idempotency-Key": req.idempotencyKey }
+        {
+          "Idempotency-Key": req.idempotencyKey,
+          ...(req.testOutcome ? { "x-test-outcome": req.testOutcome } : {}),
+        }
       );
     } catch (e) {
       if (e instanceof BankNetworkError) return { outcome: "unknown", reference: req.reference, reason: e.message };

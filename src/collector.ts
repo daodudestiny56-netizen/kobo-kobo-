@@ -4,7 +4,7 @@ import { bank } from "./bank/index.js";
 import type { BankTransaction } from "./bank/types.js";
 
 // Our own money movements are never sales. Sweep reversals ("KOBO-SWP-...-REV") match the prefix too.
-const NOT_SALES = ["KOBO-SWP-", "KOBO-WD-"];
+const NOT_SALES = ["KOBO-SWP-", "KOBO-WD-", "SWP-", "WDR-"];
 
 export function isSale(r: BankTransaction): boolean {
   return (

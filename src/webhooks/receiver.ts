@@ -7,6 +7,13 @@ import { verifySignature } from "./verify.js";
 import { bankEvents } from "./events.js";
 
 const EVENTS = ["transfer.pending", "transfer.successful", "transfer.failed", "transfer.reversed"];
+type BankEventHandler = (event: string, data: any) => void | Promise<void>;
+const eventHandlers = new Set<BankEventHandler>();
+
+export function registerBankEventHandler(handler: BankEventHandler): () => void {
+  eventHandlers.add(handler);
+  return () => eventHandlers.delete(handler);
+}
 
 // Held in memory only. The bank returns it once; we re-register on every boot, so a restart is safe.
 let secret: string | null = null;
@@ -33,6 +40,7 @@ async function poll(): Promise<void> {
 
 async function handle(event: string, d: any): Promise<void> {
   bankEvents.emit(event, d);
+  for (const handler of eventHandlers) await handler(event, d);
   const dest = d?.destination?.account_number;
   if (event === "transfer.successful" && dest && db.prepare("SELECT 1 FROM merchants WHERE bank_account = ?").get(dest)) {
     await poll(); // one source of truth for takings: the bank's rows, not the webhook body

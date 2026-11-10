@@ -48,6 +48,7 @@ export type TransferRequest = {
   nameEnquiryRef: string;
   amountKobo: Kobo;
   narration: string;
+  testOutcome?: "successful" | "failed" | "pending" | "timeout" | "reversed";
 };
 
 export type SendResult =
