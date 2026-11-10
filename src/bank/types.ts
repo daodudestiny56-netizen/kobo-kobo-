@@ -84,6 +84,9 @@ export interface BankClient {
   listTransactions(opts?: { sinceIso?: string }): Promise<BankTransaction[]>;  // team-wide, newest first
   listAccountTransactions(account: string, opts?: { sinceIso?: string }): Promise<BankTransaction[]>;
   verifyIdentity(kind: "bvn" | "nin", number: string): Promise<IdentityRecord>;
+  listWebhooks(): Promise<{ id: string; url: string }[]>;
+  deleteWebhook(id: string): Promise<void>;
+  registerWebhook(url: string, events: string[]): Promise<{ id: string; secret: string }>;
 }
 
 export class BankError extends Error {

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { BankHttp } from "./http.js";
 import { toKobo, toNaira } from "./money.js";
 import {
@@ -33,6 +34,29 @@ function mapTransfer(d: any): Transfer {
 
 export class HttpBankClient implements BankClient {
   constructor(private http: BankHttp) {}
+
+  async listWebhooks(): Promise<{ id: string; url: string }[]> {
+    const res = await this.http.get("/webhooks");
+    if (res.status >= 400) fail(res);
+    const d = res.body.data;
+    const arr: any[] = Array.isArray(d) ? d : d?.webhooks ?? [];
+    return arr.map((w) => ({ id: w.id, url: w.url }));
+  }
+
+  async deleteWebhook(id: string): Promise<void> {
+    const res = await this.http.del(`/webhooks/${encodeURIComponent(id)}`);
+    if (res.status >= 400 && res.status !== 404) fail(res);
+  }
+
+  /** The secret is returned ONCE. Response field names are unconfirmed against the real bank. */
+  async registerWebhook(url: string, events: string[]): Promise<{ id: string; secret: string }> {
+    const res = await this.http.post("/webhooks", { url, events }, { "Idempotency-Key": randomUUID() });
+    if (res.status >= 400) fail(res);
+    const d = res.body.data ?? {};
+    const secret = d.webhook_secret ?? d.secret;
+    if (!secret) throw new Error("webhook registered but no secret in the response");
+    return { id: d.id, secret };
+  }
 
   async getBalanceKobo(account: string): Promise<Kobo> {
     const res = await this.http.get(`/accounts/${account}/balance`);
