@@ -2,14 +2,16 @@ import Fastify from "fastify";
 import { db, migrate } from "./db.js";
 import { startCollector } from "./collector.js";
 import { webhookPlugin, ensureWebhook } from "./webhooks/receiver.js";
+import { onboardingRoutes } from "./onboarding/routes.js";
 
-const app = Fastify({ logger: true });
+const app = Fastify({ logger: true, trustProxy: true });
 
 const applied = migrate();
 app.log.info({ applied }, "migrations applied");
 const hasKey = !!(process.env.BANK_API_KEY || process.env.GATEWAY_KEY);
 if (hasKey) startCollector();
 await app.register(webhookPlugin);
+await app.register(onboardingRoutes);
 
 app.get("/healthz", async () => {
   db.prepare("SELECT 1").get();
