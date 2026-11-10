@@ -50,7 +50,7 @@ export class BankHttp {
           await sleep(500 * netTries);
           continue;
         }
-        throw new BankNetworkError(`${method} ${path}: ${(e as Error).message}`);
+        throw new BankNetworkError(`${method} ${sanitizePathForLog(path)}: ${(e as Error).message}`);
       }
 
       const text = await res.text();
@@ -73,7 +73,7 @@ export class BankHttp {
         continue;
       }
       if (res.status >= 400) {
-        console.warn(`[bank] ${method} ${path} -> ${res.status} ${parsed?.error?.code ?? ""} ${parsed?.request_id ?? ""}`);
+        console.warn(`[bank] ${method} ${sanitizePathForLog(path)} -> ${res.status} ${parsed?.error?.code ?? ""} ${parsed?.request_id ?? ""}`);
       }
       return { status: res.status, body: parsed, replayed: res.headers.get("idempotent-replayed") === "true" };
     }
@@ -81,3 +81,16 @@ export class BankHttp {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Logs route shape only: no query string, no account-like numbers, no transfer references.
+const sanitizePathForLog = (path: string): string => {
+  const [route] = path.split("?", 1);
+  return route
+    .split("/")
+    .map((seg, i, all) =>
+      all[i - 1] === "transfers" && !["intra", "interbank", "bulk"].includes(seg)
+        ? ":ref"
+        : seg.replace(/\d{6,}/g, ":redacted")
+    )
+    .join("/");
+};
