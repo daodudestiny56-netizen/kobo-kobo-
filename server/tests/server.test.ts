@@ -11,9 +11,11 @@ describe('server', () => {
     const r = await mk().inject('/healthz');
     expect(r.statusCode).toBe(200);
   });
-  it('refuses to boot in production without an ops token', () => {
-    expect(productionProblems(loadConfig({ NODE_ENV: 'production' }))).toHaveLength(1);
-    expect(productionProblems(loadConfig({ NODE_ENV: 'production', OPS_TOKEN: 'x' }))).toHaveLength(0);
+  it('refuses to boot in production without ops and bank credentials', () => {
+    const missing = { NODE_ENV: 'production' };
+    const configured = { NODE_ENV: 'production', OPS_TOKEN: 'x', BANK_API_KEY: 'key' };
+    expect(productionProblems(loadConfig(missing), missing)).toHaveLength(2);
+    expect(productionProblems(loadConfig(configured), configured)).toHaveLength(0);
   });
 });
 
