@@ -1,6 +1,9 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import formbody from '@fastify/formbody';
-import { timingSafeEqual } from 'node:crypto';
+import { ZodError } from 'zod';
+import { same } from './util/same';
+import { registerRoutes } from './routes';
+import { toWire } from './wire';
 import { AppError } from './errors';
 import type { Deps } from './deps';
 
@@ -9,16 +12,18 @@ const safeLog = {
   serializers: { req: (r: { method: string; url: string }) => ({ method: r.method, path: r.url.split('?')[0] }) },
 };
 
-export function same(a: string, b: string): boolean {
-  const x = Buffer.from(a), y = Buffer.from(b);
-  return x.length === y.length && timingSafeEqual(x, y);
-}
+export { same };
 
 export function buildServer(deps: Deps): FastifyInstance {
   const app = Fastify({ logger: { level: deps.config.logLevel, ...safeLog }, bodyLimit: 64 * 1024 });
   app.register(formbody);
+  app.setReplySerializer((payload) => JSON.stringify(toWire(payload)));
 
   app.setErrorHandler((err, _req, reply) => {
+    if (err instanceof ZodError) {
+      const message = err.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`).join('; ');
+      return reply.status(400).send({ status: 'error', error: { code: 'INVALID_REQUEST', message } });
+    }
     if (err instanceof AppError) {
       return reply.status(err.status).send({ status: 'error', error: { code: err.code, message: err.message, details: err.details } });
     }
@@ -40,5 +45,6 @@ export function buildServer(deps: Deps): FastifyInstance {
     }
   });
 
+  registerRoutes(app, deps);
   return app;
 }

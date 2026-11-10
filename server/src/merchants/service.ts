@@ -119,3 +119,9 @@ export function cancelMerchant(db: Db, id: string, now: Date): Merchant {
   });
   return getMerchant(db, id);
 }
+
+export function setLanguage(db: Db, id: string, language: Language): Merchant {
+  if (!LANGUAGES.includes(language)) throw new AppError('INVALID_LANGUAGE', `Language must be one of ${LANGUAGES.join(', ')}.`, 400);
+  db.prepare(`UPDATE merchants SET language = ? WHERE id = ?`).run(language, id);
+  return getMerchant(db, id);
+}

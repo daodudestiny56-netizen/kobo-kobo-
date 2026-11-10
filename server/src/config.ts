@@ -17,6 +17,10 @@ export interface Config {
   /** The stand-in "Access ARM collection (simulated)" account; sweeps go to it and withdrawals are paid from it. */
   collectionAccount: string;
   collectionLabel: string;
+  /** Optional bank accounts for the demo traders (comma separated in DEMO_BANK_ACCOUNTS), e.g. the sandbox individuals. */
+  demoBankAccounts: string[];
+  /** Hold any single credit at or above this many naira (placeholder guard) when set. */
+  guardHoldAboveNaira: number | null;
   scheduler: { enabled: boolean; sweepCron: string; retryCron: string; requeryCron: string };
   sweep: { batchConcurrency: number; defaultDailyCapKobo: number; defaultBufferKobo: number };
   /** After a sweep settles, keep checking it this long in case the bank reverses it. */
@@ -35,6 +39,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     demoMode: bool(env.DEMO_MODE, true),
     collectionAccount: env.COLLECTION_ACCOUNT ?? '0123456793',
     collectionLabel: 'Access ARM collection (simulated)',
+    demoBankAccounts: (env.DEMO_BANK_ACCOUNTS ?? '').split(',').map((x) => x.trim()).filter(Boolean),
+    guardHoldAboveNaira: env.GUARD_HOLD_ABOVE_NAIRA ? int(env.GUARD_HOLD_ABOVE_NAIRA, 0) : null,
     scheduler: {
       enabled: bool(env.SCHEDULER_ENABLED, true),
       sweepCron: env.SWEEP_CRON ?? '0 23 * * *',
