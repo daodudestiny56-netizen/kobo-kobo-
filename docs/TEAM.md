@@ -7,14 +7,20 @@ The deployed app is one process: root `src/server.ts` mounts the engine routes a
 
 | Variable | Meaning |
 |---|---|
-| `DB_PATH` | SQLite file (`/data/kobo.sqlite` in the container; mount a volume) |
-| `OPS_TOKEN` | Secret for `/api/v1/ops/*` and `/api/v1/demo/*`. Production refuses to boot without it. |
-| `DEMO_MODE` | `true` enables demo routes and demo sign-up. Defaults off in production; demo routes also require the ops token. |
+| `DB_PATH` | SQLite file (`/data/kobo.sqlite` in the container; mount durable storage) |
+| `OPS_TOKEN` | Secret for engine ops and demo-control routes. Production refuses to boot without it. |
+| `DEMO_MODE` | `true` enables demo routes and demo sign-up. Defaults off in production. |
+| `DEMO_SECRET` | Secret sent in `X-Demo-Key` for protected root demo actions when `DEMO_MODE=true`. |
+| `IDENTITY_HMAC_KEY` | Stable secret used to hash identity data; configure it before onboarding merchants. |
 | `DEMO_BANK_ACCOUNTS` | Optional, comma-separated: bank accounts for the seven demo traders (the sandbox individuals). |
 | `GUARD_HOLD_ABOVE_NAIRA` | Placeholder guard: hold any single credit at or above this amount. Demo uses `1000000`. |
 | `SCHEDULER_ENABLED`, `SWEEP_CRON`, `SWEEP_RETRY_CRON`, `REQUERY_CRON` | Defaults: 23:00 and 23:30 WAT, requery every minute. |
 
 Never commit `GATEWAY_KEY`, the webhook secret, kubeconfig or `.env`.
+
+## Kubernetes storage and secrets
+
+`k8s/app.yaml` mounts the `app-data` 1 GiB PVC at `/data`; the cluster must have a default StorageClass to provision it. Confirm the claim is `Bound` before rolling out the app. Keep `DB_PATH` on that mount and back up the PVC before replacing or migrating the database. In `team07`, the `huawei-gateway` Secret provides `GATEWAY_KEY`; `kobo-secrets` must provide `OPS_TOKEN`, `DEMO_SECRET`, and `IDENTITY_HMAC_KEY`. Create or rotate these through the approved secret-management workflow, never in source control or chat.
 
 ## Abiodun: bank client, webhooks, onboarding
 
