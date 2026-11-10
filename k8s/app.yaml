@@ -15,7 +15,7 @@ spec:
       # imagePullSecrets: [{ name: regcred }]   # uncomment if the ghcr package is private
       containers:
         - name: app
-          image: ghcr.io/timi-abiodun/kobo-kobo:v2
+          image: ghcr.io/daodudestiny56-netizen/kobo-kobo:v3
           ports:
             - containerPort: 8080
           env:

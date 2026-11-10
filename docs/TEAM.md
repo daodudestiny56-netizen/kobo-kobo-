@@ -29,7 +29,7 @@ Never commit `GATEWAY_KEY`, the webhook secret, kubeconfig or `.env`.
    - transfer result for a sweep: `applyResult(deps, sweepId, result)` (`src/sweeps/engine.ts`), find the sweep with `getSweepByReference`.
    - transfer result for a withdrawal: `applyWithdrawalResult(deps, id, result)` (`src/withdrawals/service.ts`).
    All three are safe to call twice and out of order with the requery loop.
-4. **Onboarding:** after your BVN and name-enquiry checks call `onboardMerchant(db, {...})` (`src/merchants/service.ts`). `POST /api/v1/merchants` is a plain helper (open in demo mode, ops token otherwise) for you to replace or call.
+4. **Onboarding:** the bank app's `src/onboarding/service.ts` runs registered `onOnboard(merchantId)` hooks inside its merchant/consent transaction. The engine hook registered by `src/server.ts` creates the simulated pension account and RSA PIN; a failure rolls the entire enrolment back. Its schema is in `src/migrations/0002_engine.ts`. In the standalone engine API, after the bank checks call `onboardMerchant(db, {...})` (`server/src/merchants/service.ts`), which creates its own pension account. `POST /api/v1/merchants` is a plain helper for that standalone server (open in demo mode, ops token otherwise).
 5. `productionProblems` in `src/config.ts` should also require your bank key and webhook secret.
 
 ## Tomiwa: SweepGuard, SmartRate, message copy
