@@ -1,0 +1,669 @@
+openapi: 3.0.3
+info:
+  title: Kobo Kobo core API
+  version: 0.1.0
+  description: |
+    Core backend for Kobo Kobo (nightly micro-pension sweep).
+
+    **Money** is always a decimal string in naira (`"900.00"`), never a float. **Dates** are WAT calendar dates (`2026-11-06`).
+    **Errors** are `{ "error": { "code", "message", "details"? } }`; the `code` is stable, the message is for humans.
+
+    **Auth.** Internal routes need `Authorization: Bearer $SERVICE_TOKEN` (open when unset: dev only). Telco webhooks
+    (USSD, inbound SMS, voice) use `?token=$WEBHOOK_TOKEN` instead. The Rails executor section is the contract
+    that **Rails implements** and core calls.
+
+    **Sweep window (PRD v2):** a sweep for date D counts takings settled in [00:00, 23:00) WAT of D. The 23:00-24:00 hour is
+    in no window; reconciliation reports it as `unswept_late_inflows`.
+servers:
+  - url: http://localhost:3000
+tags:
+  - name: Sweeps
+  - name: Split & PFA
+  - name: Withdrawals & pension
+  - name: PIN
+  - name: Smart Rate
+  - name: Sweep Guard
+  - name: Reconciliation
+  - name: Telco webhooks
+  - name: Rails executor (implemented by Rails)
+  - name: Ops
+
+security:
+  - serviceToken: []
+
+paths:
+  /health:
+    get:
+      tags: [Ops]
+      summary: Liveness plus a database round trip
+      security: []
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { type: object, properties: { status: { type: string, example: ok } } } } } }
+        '503': { description: Database unreachable, content: { application/json: { schema: { type: object, properties: { status: { type: string, example: unavailable }, reason: { type: string, example: database } } } } } }
+
+  /api/v1/split:
+    post:
+      tags: [Split & PFA]
+      summary: 50/50 allocation, reserved PEN reference and the ledger lines settlement will post (moves no money)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [merchant_id, sweep_date, sweep_amount]
+              properties:
+                merchant_id: { type: string, format: uuid }
+                sweep_date: { type: string, format: date }
+                sweep_amount: { $ref: '#/components/schemas/Money' }
+      responses:
+        '200':
+          description: Allocation. The odd kobo goes to the Retirement Pot.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  merchant_id: { type: string, format: uuid }
+                  sweep_date: { type: string, format: date }
+                  currency: { type: string, example: NGN }
+                  sweep_amount: { $ref: '#/components/schemas/Money' }
+                  allocations:
+                    type: object
+                    properties:
+                      emergency_pot: { $ref: '#/components/schemas/Money' }
+                      retirement_pot: { $ref: '#/components/schemas/Money' }
+                  pension_reference: { type: string, example: PEN-20261106-000001 }
+                  ledger_entries:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        account_type: { type: string, enum: [MERCHANT_CASH, EMERGENCY_POT, RETIREMENT_POT] }
+                        entry_type: { type: string, enum: [DEBIT, CREDIT] }
+                        amount: { $ref: '#/components/schemas/Money' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/pfa/rsa-pin:
+    post:
+      tags: [Split & PFA]
+      summary: Issue the (mock) ECRS RSA PIN at onboarding. Idempotent.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [merchant_id], properties: { merchant_id: { type: string, format: uuid } } } } }
+      responses:
+        '201': { description: Issued, content: { application/json: { schema: { $ref: '#/components/schemas/RsaPin' } } } }
+        '200': { description: Already existed, content: { application/json: { schema: { $ref: '#/components/schemas/RsaPin' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/sweeps/execute:
+    post:
+      tags: [Sweeps]
+      summary: Run or resume one trader's sweep for a date (idempotent)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [merchant_id, target_date]
+              properties:
+                merchant_id: { type: string, format: uuid }
+                target_date: { type: string, format: date }
+                allow_early: { type: boolean, description: 'Run before 23:00 WAT (demo only).' }
+      responses:
+        '200': { description: The sweep record, content: { application/json: { schema: { $ref: '#/components/schemas/Sweep' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/sweeps/nightly-batch:
+    post:
+      tags: [Sweeps]
+      summary: 'Run the nightly batch (what the 23:00 cron runs). Safe to call repeatedly: it is the retry.'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                target_date: { type: string, format: date, description: Defaults to today (WAT). }
+                allow_early: { type: boolean }
+      responses:
+        '200':
+          description: Batch summary (PRD 6.1)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  execution_date: { type: string, format: date }
+                  processed_merchants: { type: integer }
+                  successful_sweeps: { type: integer }
+                  zero_sales_skipped: { type: integer }
+                  paused_skipped: { type: integer }
+                  buffer_skipped: { type: integer }
+                  guard_alerts_held: { type: integer }
+                  failed: { type: integer }
+                  pending_retry: { type: integer }
+                  errors: { type: integer }
+                  total_aum_swept_ngn: { $ref: '#/components/schemas/Money' }
+        '409': { description: 'BATCH_ALREADY_RUNNING or WINDOW_STILL_OPEN', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/v1/sweeps/settle:
+    post:
+      tags: [Sweeps]
+      summary: Rails reports a CONFIRMED debit. Posts the ledger, credits both pots, queues the SMS receipt. Idempotent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [merchant_id, sweep_date, sweep_amount, debit_reference]
+              properties:
+                merchant_id: { type: string, format: uuid }
+                sweep_date: { type: string, format: date }
+                sweep_amount: { $ref: '#/components/schemas/Money' }
+                debit_reference: { type: string }
+      responses:
+        '200':
+          description: Settled (already_settled is true on a repeat)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Sweep'
+                  - type: object
+                    properties:
+                      already_settled: { type: boolean }
+                      sms_receipt: { type: string, example: QUEUED }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/withdrawals:
+    post:
+      tags: [Withdrawals & pension]
+      summary: Emergency Pot to the trader's own Access account. Needs the PIN unless WITHDRAWAL_PIN_REQUIRED=false.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [merchant_id, amount]
+              properties:
+                merchant_id: { type: string, format: uuid }
+                amount: { $ref: '#/components/schemas/Money' }
+                pin: { type: string, pattern: '^\d{4}$' }
+      responses:
+        '201':
+          description: Withdrawal (DISBURSED, or PENDING when the bank outcome is unknown and is being replayed; REJECTED when the bank refused, funds restored)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  withdrawal_id: { type: string, format: uuid }
+                  merchant_id: { type: string, format: uuid }
+                  amount: { $ref: '#/components/schemas/Money' }
+                  destination_nuban: { type: string }
+                  status: { type: string, enum: [PENDING, APPROVED, DISBURSED, REJECTED] }
+                  credit_reference: { type: string, nullable: true }
+                  failure_reason: { type: string, nullable: true }
+                  disbursed_at: { type: string, format: date-time, nullable: true }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { description: 'PIN_INVALID (details.attempts_remaining)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: 'PIN_NOT_SET, NOT_VESTED, COOLDOWN_ACTIVE, INSUFFICIENT_EMERGENCY_BALANCE, NO_CONTRIBUTIONS', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '423': { description: 'PIN_LOCKED (details.locked_until, details.minutes)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/v1/merchants/{id}/pension:
+    get:
+      tags: [Withdrawals & pension]
+      summary: Pot balances, whether a PIN is set, and when the Emergency Pot can be cashed out
+      parameters: [{ $ref: '#/components/parameters/MerchantId' }]
+      responses:
+        '200':
+          description: Summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  merchant_id: { type: string, format: uuid }
+                  rsa_pin: { type: string }
+                  emergency_pot: { $ref: '#/components/schemas/Money' }
+                  retirement_pot: { $ref: '#/components/schemas/Money' }
+                  total_saved: { $ref: '#/components/schemas/Money' }
+                  first_contribution_at: { type: string, format: date-time, nullable: true }
+                  last_withdrawal_at: { type: string, format: date-time, nullable: true }
+                  pin_set: { type: boolean }
+                  emergency_withdrawal:
+                    type: object
+                    properties:
+                      eligible: { type: boolean }
+                      reason: { type: string, nullable: true, enum: [NO_CONTRIBUTIONS, NOT_VESTED, COOLDOWN_ACTIVE, EMPTY, null] }
+                      eligible_on: { type: string, format: date-time, nullable: true }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/merchants/{id}/pin:
+    get:
+      tags: [PIN]
+      summary: Is a PIN set?
+      parameters: [{ $ref: '#/components/parameters/MerchantId' }]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { type: object, properties: { pin_set: { type: boolean } } } } } }
+    post:
+      tags: [PIN]
+      summary: Set the PIN (onboarding, from an authenticated app session). reset=true replaces one after an identity check.
+      parameters: [{ $ref: '#/components/parameters/MerchantId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [pin], properties: { pin: { type: string, pattern: '^\d{4}$' }, reset: { type: boolean } } } } }
+      responses:
+        '204': { description: Set. The trader is texted. }
+        '400': { description: PIN_FORMAT, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: PIN_ALREADY_SET, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: PIN_TOO_WEAK (repeats, runs like 1234, end of the phone number), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/v1/merchants/{id}/pin/verify:
+    post:
+      tags: [PIN]
+      summary: Check a PIN. Wrong guesses count toward the lockout (3 tries, 30 minutes).
+      parameters: [{ $ref: '#/components/parameters/MerchantId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [pin], properties: { pin: { type: string } } } } }
+      responses:
+        '200': { description: Correct, content: { application/json: { schema: { type: object, properties: { valid: { type: boolean, example: true } } } } } }
+        '401': { description: PIN_INVALID (details.attempts_remaining), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: PIN_NOT_SET, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '423': { description: PIN_LOCKED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/v1/merchants/{id}/pin/change:
+    post:
+      tags: [PIN]
+      summary: Change the PIN (the old one must verify)
+      parameters: [{ $ref: '#/components/parameters/MerchantId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [old_pin, new_pin], properties: { old_pin: { type: string }, new_pin: { type: string } } } } }
+      responses:
+        '204': { description: Changed. The trader is texted. }
+        '401': { description: PIN_INVALID, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: PIN_UNCHANGED or PIN_TOO_WEAK, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '423': { description: PIN_LOCKED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/v1/smart-rate/suggestions:
+    post:
+      tags: [Smart Rate]
+      summary: The AI proposes a new rate. Texts the trader; NEVER changes sweep_percentage.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [merchant_id, suggested_rate]
+              properties:
+                merchant_id: { type: string, format: uuid }
+                suggested_rate: { type: string, example: '3', description: 'Percent, 1 to 5, up to 2 decimals.' }
+                reason: { type: string, maxLength: 500 }
+      responses:
+        '201': { description: Open suggestion, content: { application/json: { schema: { $ref: '#/components/schemas/Suggestion' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'SUGGESTION_PENDING or SUGGESTION_COOLDOWN (details.retry_after)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: RATE_UNCHANGED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/v1/smart-rate/suggestions/{id}/respond:
+    post:
+      tags: [Smart Rate]
+      summary: In-app accept or decline (same effect as SMS YES / NO)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [merchant_id, decision], properties: { merchant_id: { type: string, format: uuid }, decision: { type: string, enum: [ACCEPT, DECLINE] } } } } }
+      responses:
+        '200':
+          description: Answered
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Suggestion'
+                  - type: object
+                    properties:
+                      sweep_percentage: { type: string, example: '3' }
+        '409': { description: SUGGESTION_NOT_OPEN (answered, replaced or expired), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/v1/merchants/{id}/smart-rate:
+    get:
+      tags: [Smart Rate]
+      summary: The open suggestion for the app banner, or null
+      parameters: [{ $ref: '#/components/parameters/MerchantId' }]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestion:
+                    nullable: true
+                    allOf: [{ $ref: '#/components/schemas/Suggestion' }]
+
+  /api/v1/sweep-guard/alerts:
+    get:
+      tags: [Sweep Guard]
+      summary: Review queue of Sweep Guard alerts
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [PENDING_REVIEW, DISMISSED, CONFIRMED] } }
+        - { name: merchant_id, in: query, schema: { type: string, format: uuid } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500 } }
+      responses:
+        '200': { description: Alerts, content: { application/json: { schema: { type: object, properties: { alerts: { type: array, items: { $ref: '#/components/schemas/Alert' } } } } } } }
+
+  /api/v1/sweep-guard/alerts/{id}/resolve:
+    post:
+      tags: [Sweep Guard]
+      summary: RELEASE re-plans and executes the held sweep; CONFIRM keeps it unswept. Repeating a decision is safe.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision, resolved_by]
+              properties:
+                decision: { type: string, enum: [RELEASE, CONFIRM] }
+                resolved_by: { type: string, example: 'ops:amaka' }
+                note: { type: string, maxLength: 500 }
+      responses:
+        '200':
+          description: Resolved (changed=false when the same decision had already been applied)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  alert: { $ref: '#/components/schemas/Alert' }
+                  sweep: { $ref: '#/components/schemas/Sweep' }
+                  changed: { type: boolean }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'ALERT_ALREADY_RESOLVED or RELEASE_WINDOW_PASSED', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: ALERT_NOT_ACTIONABLE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: EXECUTOR_UNAVAILABLE (bank unreachable; nothing changed), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/v1/reconciliation:
+    get:
+      tags: [Reconciliation]
+      summary: Core vs bank vs ledger for one sweep date (read-only)
+      parameters:
+        - { name: date, in: query, schema: { type: string, format: date }, description: Defaults to the last closed sweep date. }
+      responses:
+        '200':
+          description: Report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sweep_date: { type: string, format: date }
+                  ok: { type: boolean }
+                  totals:
+                    type: object
+                    properties:
+                      merchants_with_sweep: { type: integer }
+                      executed_sweeps: { type: integer }
+                      total_takings: { $ref: '#/components/schemas/Money' }
+                      swept_per_core: { $ref: '#/components/schemas/Money' }
+                      debited_per_bank: { $ref: '#/components/schemas/Money' }
+                      credited_to_pots_per_ledger: { $ref: '#/components/schemas/Money' }
+                      difference_core_vs_bank: { $ref: '#/components/schemas/Money' }
+                  unswept_late_inflows:
+                    type: object
+                    description: Takings in the 23:00-24:00 hour, in no sweep window. Informational.
+                    properties: { count: { type: integer }, total: { $ref: '#/components/schemas/Money' } }
+                  flags:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        code: { type: string, enum: [MISSING_DEBIT, AMOUNT_MISMATCH, ORPHAN_DEBIT, LEDGER_MISMATCH, STUCK_SWEEP, FAILED_SWEEP, HELD_FOR_REVIEW, POT_DRIFT, PENDING_WITHDRAWAL] }
+                        merchant_id: { type: string }
+                        detail: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/v1/ussd:
+    post:
+      tags: [Telco webhooks]
+      summary: Africa's Talking USSD. English and Pidgin by the trader's preferred_language. Cumulative path in `text`, joined by `*` (0 = back, 99 = home).
+      security: [{ webhookToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: { $ref: '#/components/schemas/UssdRequest' }
+          application/json:
+            schema: { $ref: '#/components/schemas/UssdRequest' }
+      responses:
+        '200':
+          description: One screen, at most 182 characters after the prefix
+          content: { text/plain: { schema: { type: string, example: "CON Kobo Kobo\n1. Balance\n2. Today's Takings & Sweep" } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/sms/inbound:
+    post:
+      tags: [Telco webhooks]
+      summary: 'Two-way SMS. Commands: BAL, PAUSE/STOP, RESUME/START, RATE n, YES/NO (Smart Rate), OK (release a big-payment hold), HELP.'
+      security: [{ webhookToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded: { schema: { $ref: '#/components/schemas/SmsInbound' } }
+          application/json: { schema: { $ref: '#/components/schemas/SmsInbound' } }
+      responses:
+        '200': { description: The reply text (also queued as an SMS for registered traders), content: { application/json: { schema: { type: object, properties: { reply: { type: string } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/voice/callback:
+    post:
+      tags: [Telco webhooks]
+      summary: Africa's Talking Voice. isActive=1 returns the spoken balance as XML; isActive=0 (call ended) returns 204.
+      security: [{ webhookToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                isActive: { type: string, enum: ['0', '1'] }
+                direction: { type: string, enum: [Inbound, Outbound] }
+                callerNumber: { type: string }
+                destinationNumber: { type: string }
+                clientRequestId: { type: string, description: The request id core passed when it placed the call. }
+                sessionId: { type: string }
+                callSessionState: { type: string }
+                durationInSeconds: { type: string }
+      responses:
+        '200': { description: Voice XML, content: { application/xml: { schema: { type: string, example: '<Response><Say voice="woman">Hello...</Say></Response>' } } } }
+        '204': { description: Call ended }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ---------------- Implemented by Rails; core is the client ----------------
+  /api/v1/executor/balance:
+    get:
+      tags: [Rails executor (implemented by Rails)]
+      summary: Available balance of the trader's Access account
+      parameters: [{ name: nuban, in: query, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { type: object, properties: { available_balance: { $ref: '#/components/schemas/Money' } } } } } }
+
+  /api/v1/executor/debit:
+    post:
+      tags: [Rails executor (implemented by Rails)]
+      summary: Debit the trader's account. Idempotent on the key (`sweep:<merchantId>:<date>`); same key with a different amount is IDEMPOTENCY_CONFLICT.
+      parameters: [{ name: Idempotency-Key, in: header, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [merchant_id, nuban, amount, narration, pension_reference]
+              properties:
+                merchant_id: { type: string, format: uuid }
+                nuban: { type: string }
+                amount: { $ref: '#/components/schemas/Money' }
+                narration: { type: string }
+                pension_reference: { type: string }
+      responses:
+        '200': { description: Debited (or the original result on a replay), content: { application/json: { schema: { type: object, properties: { debit_reference: { type: string }, amount: { $ref: '#/components/schemas/Money' } } } } } }
+        default: { $ref: '#/components/responses/ExecutorError' }
+
+  /api/v1/executor/credit:
+    post:
+      tags: [Rails executor (implemented by Rails)]
+      summary: Credit the trader's own account (emergency withdrawal). Idempotent on `withdrawal:<id>`.
+      parameters: [{ name: Idempotency-Key, in: header, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nuban, amount, narration]
+              properties:
+                nuban: { type: string }
+                amount: { $ref: '#/components/schemas/Money' }
+                narration: { type: string }
+      responses:
+        '200': { description: Credited, content: { application/json: { schema: { type: object, properties: { credit_reference: { type: string } } } } } }
+        default: { $ref: '#/components/responses/ExecutorError' }
+
+  /api/v1/executor/debits:
+    get:
+      tags: [Rails executor (implemented by Rails)]
+      summary: Every debit made for a sweep date (used by reconciliation)
+      parameters: [{ name: sweep_date, in: query, required: true, schema: { type: string, format: date } }]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  debits:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        idempotency_key: { type: string }
+                        nuban: { type: string }
+                        amount: { $ref: '#/components/schemas/Money' }
+                        debit_reference: { type: string }
+
+components:
+  securitySchemes:
+    serviceToken: { type: http, scheme: bearer, description: SERVICE_TOKEN }
+    webhookToken: { type: apiKey, in: query, name: token, description: WEBHOOK_TOKEN }
+  parameters:
+    MerchantId: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+  schemas:
+    Money: { type: string, pattern: '^\d+(\.\d{1,2})?$', example: '900.00', description: Naira as a decimal string. }
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string, example: PIN_INVALID }
+            message: { type: string }
+            details: { type: object, additionalProperties: true }
+    RsaPin:
+      type: object
+      properties:
+        merchant_id: { type: string, format: uuid }
+        rsa_pin: { type: string }
+        pfa: { type: string, example: Access ARM Pensions }
+        pfa_code: { type: string, example: ACCESS_ARM }
+        created: { type: boolean }
+    Sweep:
+      type: object
+      properties:
+        sweep_id: { type: string, format: uuid }
+        merchant_id: { type: string, format: uuid }
+        sweep_date: { type: string, format: date }
+        status: { type: string, enum: [PENDING, EXECUTED, SKIPPED_ZERO_SALES, SKIPPED_PAUSED, SKIPPED_BUFFER, FAILED, HELD_GUARD] }
+        total_takings: { $ref: '#/components/schemas/Money' }
+        sweep_percentage: { type: string, example: '2.00' }
+        sweep_amount: { $ref: '#/components/schemas/Money' }
+        allocations:
+          type: object
+          properties:
+            emergency_pot: { $ref: '#/components/schemas/Money' }
+            retirement_pot: { $ref: '#/components/schemas/Money' }
+        pension_reference: { type: string, nullable: true }
+        debit_reference: { type: string, nullable: true }
+        sweep_guard_status: { type: string, enum: [CLEARED, HELD, NOT_EVALUATED] }
+        failure_reason: { type: string, nullable: true }
+        attempts: { type: integer }
+        timestamp: { type: string, format: date-time }
+    Suggestion:
+      type: object
+      properties:
+        suggestion_id: { type: string, format: uuid }
+        merchant_id: { type: string, format: uuid }
+        current_rate: { type: string, example: '2' }
+        suggested_rate: { type: string, example: '3' }
+        reason: { type: string, nullable: true }
+        status: { type: string, enum: [PENDING, ACCEPTED, DECLINED, EXPIRED, SUPERSEDED] }
+        responded_via: { type: string, nullable: true, enum: [SMS, APP, null] }
+        expires_at: { type: string, format: date-time }
+        responded_at: { type: string, format: date-time, nullable: true }
+    Alert:
+      type: object
+      properties:
+        alert_id: { type: string, format: uuid }
+        merchant_id: { type: string, format: uuid }
+        sweep_id: { type: string, format: uuid, nullable: true }
+        sweep_date: { type: string, format: date, nullable: true }
+        sweep_status: { type: string, nullable: true }
+        alert_type: { type: string, enum: [ANOMALOUS_INFLOW, SUSPECTED_DUPLICATE, NAME_MISMATCH, LOW_BUFFER] }
+        status: { type: string, enum: [PENDING_REVIEW, DISMISSED, CONFIRMED] }
+        details: { type: object, additionalProperties: true }
+        created_at: { type: string, format: date-time }
+        resolved_at: { type: string, format: date-time, nullable: true }
+        resolved_by: { type: string, nullable: true }
+        resolved_via: { type: string, nullable: true, enum: [OPS, SMS, null] }
+        resolution_note: { type: string, nullable: true }
+    UssdRequest:
+      type: object
+      required: [phoneNumber]
+      properties:
+        sessionId: { type: string }
+        serviceCode: { type: string }
+        phoneNumber: { type: string, example: '+2348031230001' }
+        text: { type: string, example: '5*100*1*7391' }
+    SmsInbound:
+      type: object
+      required: [from]
+      properties:
+        from: { type: string, example: '+2348031230001' }
+        text: { type: string, example: BAL }
+        id: { type: string, description: Telco message id, used to de-duplicate redeliveries. }
+  responses:
+    BadRequest: { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Unauthorized: { description: Missing or wrong token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NotFound: { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Conflict: { description: Conflicts with current state, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Unprocessable: { description: A business rule refused it, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    ExecutorError:
+      description: 'Non-2xx with { error: { code } }. code is one of TIMEOUT, UNAVAILABLE (retryable; outcome unknown), INSUFFICIENT_FUNDS, REJECTED, ACCOUNT_BLOCKED, IDEMPOTENCY_CONFLICT (final). 408, 429 and 5xx are retryable.'
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }

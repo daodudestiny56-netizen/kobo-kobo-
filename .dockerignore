@@ -1,7 +1,8 @@
-node_modules
-dist
-.env
-*.sqlite*
-team07.yaml
+**/node_modules
+**/dist
+**/*.sqlite*
+.git
+.env*
+team*.yml
 kubeconfig*
 k8s
