@@ -3,6 +3,8 @@ import { db, migrate } from "./db.js";
 import { startCollector } from "./collector.js";
 import { webhookPlugin, ensureWebhook } from "./webhooks/receiver.js";
 import { onboardingRoutes } from "./onboarding/routes.js";
+import { onOnboard } from "./onboarding/service.js";
+import { createPensionAccountOnboardingHook } from "./pension/onboarding.js";
 import { demoRoutes } from "./demo/routes.js";
 import { seedIfEmpty } from "./demo/reset.js";
 
@@ -10,6 +12,7 @@ const app = Fastify({ logger: true, trustProxy: true });
 
 const applied = migrate();
 app.log.info({ applied }, "migrations applied");
+onOnboard(createPensionAccountOnboardingHook(db));
 const hasKey = !!(process.env.BANK_API_KEY || process.env.GATEWAY_KEY);
 if (hasKey) startCollector();
 await app.register(webhookPlugin);
