@@ -9,7 +9,7 @@ import { makeDeps } from './helpers';
 import { toWatDate } from '../src/time';
 
 describe('demo seed', () => {
-  it('builds seven traders with clean books, the right stories and an unswept night', async () => {
+  it('builds eight traders with clean books, the right stories and an unswept night', async () => {
     const now = new Date('2026-11-12T14:00:00Z');
     const deps = makeDeps({ now });
     deps.guard = new ThresholdGuard(1_000_000_00n);
@@ -19,16 +19,18 @@ describe('demo seed', () => {
     expect((await reconciliationReport(deps)).ok).toBe(true);
 
     const by = Object.fromEntries(r.personas.map((p) => [p.key, merchantSummary(deps, p.merchantId)]));
-    expect(by.ngozi.eligibility.eligible).toBe(true); // vested, no past withdrawal
-    expect(by.chidi.eligibility.eligible).toBe(false); // 1 month old
+    expect(by.adaeze.eligibility.eligible).toBe(true); // vested, no past withdrawal
+    expect(by.efosa.eligibility.eligible).toBe(false); // under a month old
+    expect(by.babatunde.eligibility.eligible).toBe(true);
+    expect(by.musa.eligibility.eligible).toBe(false); // 8 weeks in
     expect(by.funmi.eligibility.eligible).toBe(false); // cooldown after the 20-day-old withdrawal
     expect(by.bisi.paused).toBe(true);
-    expect(by.musa.takingsToday).toBe(12_000_000n); // N120,000 tonight
+    expect(by.babatunde.takingsToday).toBe(2_300_000n); // N23,000 tonight
     expect(deps.db.prepare(`SELECT COUNT(*) n FROM rate_suggestions WHERE status = 'OPEN'`).get()).toEqual({ n: 1 });
 
     // Live night: Bisi paused, Emeka under his buffer, Ife's big credit held (her smaller one still sweeps).
     const run = await runBatch(deps, toWatDate(now), { allowEarly: true });
-    expect('byStatus' in run && run.byStatus).toMatchObject({ SETTLED: 5, SKIPPED_PAUSED: 1, SKIPPED_LOW_BALANCE: 1 });
+    expect('byStatus' in run && run.byStatus).toMatchObject({ SETTLED: 6, SKIPPED_PAUSED: 1, SKIPPED_LOW_BALANCE: 1 });
     expect(deps.db.prepare(`SELECT COUNT(*) n FROM guard_alerts WHERE status = 'PENDING_REVIEW'`).get()).toEqual({ n: 1 });
     expect(ledgerProblems(deps.db)).toEqual([]);
   }, 60_000);

@@ -28,6 +28,8 @@ const LANGS = ["en", "pidgin", "yoruba", "hausa", "igbo"];
 export type OnboardInput = {
   phone?: string; bankAccount?: string; bvn?: string; language?: string;
   consentAccepted?: boolean; consentVersion?: string;
+  // The web app's sign-up form: `consent: true` means "accepted the current text"; rateBps sets the starting rate.
+  consent?: boolean; rateBps?: number; nin?: string;
 };
 
 export async function onboard(b: OnboardInput) {
@@ -39,8 +41,12 @@ export async function onboard(b: OnboardInput) {
   if (!/^\d{11}$/.test(bvn)) throw new OnboardError("INVALID_REQUEST", 400, "bvn must be 11 digits", "bvn");
   const language = b.language ?? "pidgin";
   if (!LANGS.includes(language)) throw new OnboardError("INVALID_REQUEST", 400, "unsupported language", "language");
-  if (b.consentAccepted !== true) throw new OnboardError("CONSENT_REQUIRED", 400, "Consent must be accepted", "consentAccepted");
-  if (b.consentVersion !== CONSENT_VERSION) {
+  if (b.consentAccepted !== true && b.consent !== true) throw new OnboardError("CONSENT_REQUIRED", 400, "Consent must be accepted", "consentAccepted");
+  if (b.rateBps !== undefined && !(Number.isInteger(b.rateBps) && b.rateBps >= 100 && b.rateBps <= 500)) {
+    throw new OnboardError("INVALID_REQUEST", 400, "rateBps must be a whole number from 100 to 500", "rateBps");
+  }
+  // `consent: true` carries no version, so it is taken to mean the text the app showed: the current one.
+  if (b.consent !== true && b.consentVersion !== CONSENT_VERSION) {
     throw new OnboardError("CONSENT_VERSION_MISMATCH", 400, "The consent text has changed. Reload and accept again", "consentVersion");
   }
 
@@ -74,6 +80,7 @@ export async function onboard(b: OnboardInput) {
         .run(merchantId, phone, ident.fullName, bvnHash, account, language, now);
       db.prepare("INSERT INTO consents (id, merchant_id, text_version, given_at) VALUES (?,?,?,?)")
         .run(randomUUID(), merchantId, CONSENT_VERSION, now);
+      if (b.rateBps !== undefined) db.prepare("UPDATE merchants SET rate_bps = ? WHERE id = ?").run(b.rateBps, merchantId);
       for (const h of hooks) h(merchantId);
     })();
   } catch (e) {
@@ -82,5 +89,5 @@ export async function onboard(b: OnboardInput) {
     }
     throw e;
   }
-  return { merchantId, fullName: ident.fullName, language, rateBps: 200 };
+  return { merchantId, fullName: ident.fullName, language, rateBps: b.rateBps ?? 200 };
 }

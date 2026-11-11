@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { BankError, BankNetworkError } from "../bank/types.js";
 import { CONSENT_TEXT, CONSENT_VERSION, OnboardError, onboard, type OnboardInput } from "./service.js";
 
-export async function onboardingRoutes(app: FastifyInstance, opts: { perMinute?: number } = {}) {
+export async function onboardingRoutes(app: FastifyInstance, opts: { perMinute?: number; mapResult?: (r: { merchantId: string }) => unknown } = {}) {
   const max = opts.perMinute ?? 5;
   const hits = new Map<string, number[]>();
 
@@ -17,7 +17,8 @@ export async function onboardingRoutes(app: FastifyInstance, opts: { perMinute?:
     hits.set(req.ip, [...recent, now]);
 
     try {
-      return reply.code(201).send(await onboard(req.body ?? {}));
+      const created = await onboard(req.body ?? {});
+      return reply.code(201).send(opts.mapResult ? opts.mapResult(created) : created);
     } catch (e) {
       if (e instanceof OnboardError) {
         return reply.code(e.status).send({ error: { code: e.code, message: e.message, field: e.field } });

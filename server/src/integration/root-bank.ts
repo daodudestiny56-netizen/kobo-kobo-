@@ -1,5 +1,5 @@
 import { BankError as RootBankError, BankNetworkError, type BankClient } from '../../../src/bank/types.js';
-import { BankError, type BankPort, type BankErrorCode, type TransferRequest, type TransferResult } from '../bank/port';
+import { BankError, type PayIn, type BankPort, type BankErrorCode, type TransferRequest, type TransferResult } from '../bank/port';
 import type { Kobo } from '../money';
 
 const ERROR_CODES: Record<string, BankErrorCode> = {
@@ -58,7 +58,7 @@ export class RootBankPort implements BankPort {
   async nameEnquiry(destinationAccount: string) {
     try {
       const enquiry = await this.client.nameEnquiry(destinationAccount);
-      return { nameEnquiryRef: enquiry.ref, accountName: enquiry.accountName };
+      return { nameEnquiryRef: enquiry.ref, accountName: enquiry.accountName, kycLevel: enquiry.kycLevel };
     } catch (error) {
       throw mapError(error);
     }
@@ -94,5 +94,19 @@ export class RootBankPort implements BankPort {
     } catch (error) {
       throw mapError(error);
     }
+  }
+
+  /** Demo only. Sends a real intrabank transfer from the payer account to a trader; the collector then sees the credit. */
+  async payIn(req: PayIn): Promise<TransferResult> {
+    const enquiry = await this.nameEnquiry(req.destinationAccount);
+    return this.transfer({
+      sourceAccount: req.sourceAccount,
+      destinationAccount: req.destinationAccount,
+      nameEnquiryRef: enquiry.nameEnquiryRef,
+      amount: req.amount,
+      narration: 'Demo sale',
+      reference: req.reference,
+      idempotencyKey: req.idempotencyKey,
+    });
   }
 }

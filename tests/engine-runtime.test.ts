@@ -49,14 +49,14 @@ test("engine routes use the root database and refuse retirement-pot withdrawals"
       url: "/api/v1/merchants",
       payload: {
         phone: "+2348031234567",
-        full_name: "Ada Okafor",
+        fullName: "Ada Okafor",
         bvn: "12345678901",
-        bank_account: "0123456789",
+        bankAccount: "0123456789",
       },
     });
     assert.equal(enrolled.statusCode, 201);
-    const { merchant, rsa_pin } = enrolled.json().data;
-    assert.match(rsa_pin, /^PEN\d{12}$/);
+    const merchant = enrolled.json().data;
+    assert.match(merchant.rsaPin, /^PEN\d{12}$/);
     assert.equal(
       (db.prepare("SELECT COUNT(*) AS count FROM pension_accounts WHERE merchant_id = ?").get(merchant.id) as { count: number }).count,
       1,
@@ -65,10 +65,10 @@ test("engine routes use the root database and refuse retirement-pot withdrawals"
     const withdrawal = await app.inject({
       method: "POST",
       url: "/api/v1/withdrawals",
-      payload: { merchant_id: merchant.id, amount_naira: "100", pot: "RETIREMENT" },
+      payload: { merchantId: merchant.id, amountNaira: "100", pot: "RETIREMENT" },
     });
     assert.equal(withdrawal.statusCode, 200);
-    assert.equal(withdrawal.json().data.accepted, false);
+    assert.equal(withdrawal.json().data.ok, false);
     assert.match(withdrawal.json().data.message, /50/);
 
     const ussd = await app.inject({
@@ -78,7 +78,7 @@ test("engine routes use the root database and refuse retirement-pot withdrawals"
       payload: "phoneNumber=%2B2348031234567&text=",
     });
     assert.equal(ussd.statusCode, 200);
-    assert.match(ussd.body, /^CON /);
+    assert.equal(ussd.json().data.type, "CON");
   } finally {
     runtime.stop();
     await app.close();

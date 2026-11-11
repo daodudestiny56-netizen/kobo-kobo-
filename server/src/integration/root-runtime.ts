@@ -15,8 +15,12 @@ import { toWire } from '../wire';
 import { applyResult, getSweepByReference } from '../sweeps/engine';
 import { applyWithdrawalResult, getWithdrawal } from '../withdrawals/service';
 import { seedDemo } from '../demo/seed';
+import { getMerchant } from '../merchants/service';
+import { webMerchant } from '../web/mappers';
 
 export interface IntegratedRuntime {
+  /** A trader in the shape the web app reads (camelCase, epoch-ms times). */
+  merchantView(merchantId: string): unknown;
   stop(): void;
   seedIfEmpty(): Promise<void>;
 }
@@ -75,6 +79,7 @@ export function registerEngineRuntime(app: FastifyInstance, db: Database.Databas
 
   const stopScheduler = startScheduler(deps);
   return {
+    merchantView: (merchantId) => toWire(webMerchant(deps, getMerchant(db, merchantId))),
     stop() {
       unregisterEvent();
       stopScheduler();

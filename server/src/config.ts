@@ -14,6 +14,12 @@ export interface Config {
   opsToken: string;
   /** Shows the demo banner and enables /api/v1/demo/*. */
   demoMode: boolean;
+  /** Demo only: the ops dashboard and demo controls need no token (the web app sends none yet). Explicit opt-in: DEMO_OPEN=1. */
+  opsOpenInDemo: boolean;
+  /** Alternative to OPS_TOKEN, sent as x-demo-key (same header the original demo controls used). */
+  demoSecret: string;
+  /** Bank account that pays the demo "customer pays" transfers when a real bank is connected. */
+  demoPayerAccount: string;
   /** The stand-in "Access ARM collection (simulated)" account; sweeps go to it and withdrawals are paid from it. */
   collectionAccount: string;
   collectionLabel: string;
@@ -38,6 +44,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     dbPath: env.DB_PATH ?? './data/kobo.sqlite',
     opsToken: env.OPS_TOKEN ?? '',
     demoMode: bool(env.DEMO_MODE, nodeEnv !== 'production'),
+    opsOpenInDemo: bool(env.DEMO_OPEN, false),
+    demoSecret: env.DEMO_SECRET ?? '',
+    demoPayerAccount: env.DEMO_PAYER_ACCOUNT ?? '0123456793',
     collectionAccount: env.COLLECTION_ACCOUNT ?? '0123456793',
     collectionLabel: 'Access ARM collection (simulated)',
     demoBankAccounts: (env.DEMO_BANK_ACCOUNTS ?? '').split(',').map((x) => x.trim()).filter(Boolean),
@@ -63,7 +72,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 export function productionProblems(c: Config, env: NodeJS.ProcessEnv = process.env): string[] {
   if (c.nodeEnv !== 'production') return [];
   const p: string[] = [];
-  if (!c.opsToken) p.push('OPS_TOKEN is empty: the ops dashboard and demo controls would be open to the internet.');
+  if (!c.opsToken && !c.demoSecret && !(c.demoMode && c.opsOpenInDemo)) p.push('OPS_TOKEN is empty: the ops dashboard and demo controls would be open to the internet.');
   if (!(env.BANK_API_KEY || env.GATEWAY_KEY)) p.push('BANK_API_KEY (or GATEWAY_KEY) is empty: bank collection and transfers cannot run.');
   return p;
 }

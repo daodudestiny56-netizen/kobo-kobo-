@@ -52,27 +52,27 @@ In-process TypeScript, no second service (agreed).
 
 ## Destiny: PWA, simulators, ops dashboard
 
-Base path `/api/v1`. Success is `{status: "success", data}`; errors are `{status: "error", error: {code, message}}`. JSON keys are snake_case; money is integer kobo (divide by 100 for naira). Merchant ids are UUIDs.
+Set `NEXT_PUBLIC_API_MODE=live`. Base path `/api/v1`. Success is `{status: "success", data}`; errors are `{status: "error", error: {code, message}}`. Keys are camelCase, money is integer kobo, and every time the web types declare as `number` is epoch milliseconds. The shapes are `web/src/lib/api/types.ts`; the mappers are `server/src/web/mappers.ts`.
 
-| Call | Use |
+| Call | Notes |
 |---|---|
-| `POST /merchants` | Sign up: `phone, full_name, bvn, bank_account, language?, rate_bps?` |
-| `GET /merchants/:id/summary` | Everything the home screen shows: pots, today's takings, estimated sweep, `eligibility` (with the refusal reason and open date), `open_suggestion`, `demo_clock_offset_days` |
-| `PATCH /merchants/:id/settings` | `rate_bps`, `paused` (+ `pause_hours`), `language`, `cancel: true` |
-| `GET /merchants/:id/messages` | SMS simulator conversation (inbound and outbound) |
-| `GET /merchants/:id/sweeps`, `/inflows`, `/withdrawals` | History |
-| `POST /withdrawals` | `{merchant_id, amount_naira}`. A refusal is HTTP 200 with `accepted:false` and `message` (same wording as USSD and SMS) |
-| `GET /merchants/:id/suggestion`, `POST .../suggestion/respond` | `{decision: "accept" \| "decline"}` |
-| `POST /ussd` | `{phoneNumber, text}` (JSON or form). Reply is plain text starting `CON ` or `END `. `text` is the whole path so far, e.g. `5*500*1`. |
-| `POST /sms/inbound` | `{from, text}`, reply `{reply}`. Commands: BAL, PAUSE, RESUME, RATE n, CASHOUT n, STOP, HELP, YES, NO |
+| `GET /demo/traders`, `POST /demo/sign-in {account}` | the four sandbox traders; sign-in enrols on first use |
+| `POST /auth/verify-otp {phone, code}` | code `123456`; returns `{merchantId \| null}` |
+| `GET /identity/resolve?account=` | `{name, tier}` from the bank's name enquiry |
+| `POST /merchants/onboard` | `{bankAccount, bvn, nin, phone, language, rateBps, consent}`; BVN + name match; returns a Merchant |
+| `GET /merchants/:id/summary` | the whole home screen (pots, takings, eligibility with the refusal sentence, `smartRate`, `account`, `stats`, `series`, `balanceSeries`) |
+| `GET /merchants/:id/activity`, `/feed` | sweeps; payments + savings + withdrawals, newest first |
+| `PATCH /merchants/:id/settings` | `{rateBps, language, pauseHours (0 resumes), cancel, reactivate}`; returns the Summary |
+| `POST /withdrawals` | `{merchantId, amountKobo}`; a refusal is HTTP 200 `{ok:false, message}` (same wording as USSD and SMS) |
+| `POST /ussd` | `{phoneNumber, sessionId, text}` returns `{type: "CON"\|"END", body}`; `?format=text` returns the raw string |
+| `POST /sms/inbound` | `{from, text}` returns `{reply}` |
+| `GET /merchants/:id/messages` | the SMS simulator's conversation |
 
-Ops (header `Authorization: Bearer <OPS_TOKEN>`):
-`GET /ops/merchants`, `GET /ops/sweeps?date=&status=`, `POST /ops/sweeps/run {as_of?, allow_early?, force_outcome?, merchant_id?}`, `POST /ops/requery`, `GET /ops/alerts`, `POST /ops/alerts/:id/resolve {action: DISMISS|CONFIRM, note?}`, `GET /ops/reconciliation` (`ok` is true when the books balance).
+Ops (also open with `DEMO_OPEN=1` in demo mode): `GET /ops/overview`, `GET /ops/merchants`, `POST /ops/sweeps/run {forceOutcome: none\|failed\|timeout\|reversed}` (runs today's Lagos-date sweep, before the cutoff too in demo mode), `POST /ops/sweeps/:id/requery`, `POST /ops/alerts/:id/resolve {decision: DISMISSED\|CONFIRMED}`. These return the OpsOverview. Extra: `GET /ops/reconciliation`, `POST /ops/requery`, `POST /ops/suggestions`.
 
-Demo (needs `DEMO_MODE=true` and the ops token):
-`POST /demo/inflow {phone | merchant_id, amount_naira, channel?}` (a customer pays), `GET|POST /demo/clock {offset_days}` (moves only the withdrawal-eligibility clock), `POST /demo/reset`.
+Demo: `GET /demo/clock`, `POST /demo/clock {days}` (moves only the withdrawal-eligibility clock), `POST /demo/inflow {merchantId, amountKobo, count?}` (a real bank transfer from `DEMO_PAYER_ACCOUNT` when a bank is connected, otherwise recorded directly), `POST /demo/reset`.
 
-Demo run: reset, show the Emergency Pot closed for Chidi, pay Ngozi, `POST /ops/sweeps/run {allow_early: true}`, open the SMS simulator, set the clock to 100 days to open a withdrawal.
+**Auth:** the web app sends no token yet. Either set `DEMO_OPEN=1` (demo only: opens ops and the demo controls to anyone), or have the Next.js server add `Authorization: Bearer $OPS_TOKEN` (or `x-demo-key`) to `/api/v1/ops/*` and the changing `/api/v1/demo/*` calls.
 
 ## Branches and PRs (stacked, in this order)
 

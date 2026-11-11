@@ -10,6 +10,7 @@ import { addDays, sweepCutoff, sweepWindow, toWatDate } from '../time';
 import { requestWithdrawal } from '../withdrawals/service';
 import { pauseMerchant } from '../merchants/service';
 import { recordInflow } from '../inflows/service';
+import { DEMO_TRADERS } from './traders';
 
 /**
  * Demo data (synthetic only). Each trader's history is built by running the REAL sweep engine day by day on a
@@ -19,17 +20,23 @@ import { recordInflow } from '../inflows/service';
 export interface Persona {
   key: string; name: string; phone: string; language: Language; rateBps: number;
   historyDays: number; dailyTakings: number; tonight: number[];
+  /** Set for the four sandbox individuals: their real sandbox account and BVN. Others exist only on the simulated bank. */
+  sandbox?: { bankAccount: string; bvn: string };
   bufferNaira?: number; paused?: boolean; pastWithdrawal?: { daysAgo: number; naira: number }; suggestBps?: number; story: string;
 }
 
+const fx = (i: number) => DEMO_TRADERS[i];
+const sandbox = (i: number) => ({ name: fx(i).fullName, phone: fx(i).phone, language: fx(i).language, sandbox: { bankAccount: fx(i).bankAccount, bvn: fx(i).bvn } });
+
 export const PERSONAS: Persona[] = [
-  { key: 'ngozi', name: 'Mama Ngozi', phone: '+2348031230001', language: 'pidgin', rateBps: 200, historyDays: 125, dailyTakings: 38000, tonight: [12000, 18500, 14500], story: 'Vested (4+ months). Can withdraw. Pidgin. Normal sweep tonight.' },
-  { key: 'musa', name: 'Alhaji Musa', phone: '+2348031230002', language: 'en', rateBps: 300, historyDays: 110, dailyTakings: 90000, tonight: [60000, 45000, 15000], suggestBps: 400, story: 'Vested. English. Has a Smart Rate suggestion waiting (reply YES or NO).' },
-  { key: 'chidi', name: 'Chidi Okeke', phone: '+2348031230003', language: 'en', rateBps: 200, historyDays: 30, dailyTakings: 24000, tonight: [9000, 11000], story: 'Young account (1 month): the Emergency Pot is still closed.' },
-  { key: 'funmi', name: 'Funmi Adebayo', phone: '+2348031230004', language: 'en', rateBps: 200, historyDays: 120, dailyTakings: 30000, tonight: [8000, 9500], pastWithdrawal: { daysAgo: 20, naira: 500 }, story: 'Vested but withdrew 20 days ago: the 2-month cooldown is active.' },
-  { key: 'bisi', name: 'Bisi Lawal', phone: '+2348031230005', language: 'pidgin', rateBps: 200, historyDays: 60, dailyTakings: 27000, tonight: [20000, 7000], paused: true, story: 'Paused for 48 hours: tonight is skipped.' },
-  { key: 'emeka', name: 'Emeka Nwosu', phone: '+2348031230006', language: 'en', rateBps: 200, historyDays: 45, dailyTakings: 21000, tonight: [15000, 6000], bufferNaira: 5_000_000, story: 'Account balance is below the minimum buffer: tonight is skipped.' },
-  { key: 'ife', name: 'Ife Balogun', phone: '+2348031230007', language: 'en', rateBps: 200, historyDays: 90, dailyTakings: 33000, tonight: [1_800_000, 900_000], story: 'A very large night. With GUARD_HOLD_ABOVE_NAIRA=1000000 the guard holds the big credit for ops review; the smaller one still sweeps.' },
+  { key: 'adaeze', ...sandbox(0), rateBps: 200, historyDays: 128, dailyTakings: 30000, tonight: [12000, 18500, 14500], pastWithdrawal: { daysAgo: 71, naira: 3000 }, story: 'Vested (4+ months), last withdrew 71 days ago: can withdraw now. Pidgin.' },
+  { key: 'babatunde', ...sandbox(1), rateBps: 300, historyDays: 96, dailyTakings: 24000, tonight: [9000, 14000], suggestBps: 400, story: 'Vested. Has a Smart Rate suggestion waiting (reply YES or NO).' },
+  { key: 'musa', ...sandbox(2), rateBps: 200, historyDays: 58, dailyTakings: 11500, tonight: [5000, 6500], story: 'Eight weeks in: the Emergency Pot is still closed.' },
+  { key: 'efosa', ...sandbox(3), rateBps: 200, historyDays: 26, dailyTakings: 9000, tonight: [4000, 3500], story: 'New account (under a month): the Emergency Pot is closed.' },
+  { key: 'funmi', name: 'Funmi Adebayo', phone: '+2348031230004', language: 'en', rateBps: 200, historyDays: 120, dailyTakings: 30000, tonight: [8000, 9500], pastWithdrawal: { daysAgo: 20, naira: 500 }, story: 'Vested but withdrew 20 days ago: the 2-month cooldown is active. (simulated bank only)' },
+  { key: 'bisi', name: 'Bisi Lawal', phone: '+2348031230005', language: 'pidgin', rateBps: 200, historyDays: 60, dailyTakings: 27000, tonight: [20000, 7000], paused: true, story: 'Paused for 48 hours: tonight is skipped. (simulated bank only)' },
+  { key: 'emeka', name: 'Emeka Nwosu', phone: '+2348031230006', language: 'en', rateBps: 200, historyDays: 45, dailyTakings: 21000, tonight: [15000, 6000], bufferNaira: 5_000_000, story: 'Balance below the minimum buffer: tonight is skipped. (simulated bank only)' },
+  { key: 'ife', name: 'Ife Balogun', phone: '+2348031230007', language: 'en', rateBps: 200, historyDays: 90, dailyTakings: 33000, tonight: [1_800_000, 900_000], story: 'A very large night. With GUARD_HOLD_ABOVE_NAIRA=1000000 the guard holds the big credit; the smaller one still sweeps. (simulated bank only)' },
 ];
 
 /** Deterministic PRNG so every seed builds identical history. */
@@ -68,13 +75,16 @@ export async function seedDemo(deps: Deps, now: Date = deps.clock()): Promise<Se
   const hist: Deps = { db, config, clock: () => clock, bank: new SimulatedBank(() => clock), guard: new AllowAllGuard() };
   const out: SeedResult['personas'] = [];
 
+  // A real bank only knows the four sandbox individuals; the other personas need the simulated bank.
+  const realBank = !(deps.bank instanceof SimulatedBank);
+  const personas = PERSONAS.filter((p) => p.sandbox || !realBank);
   let n = 0;
-  for (const p of PERSONAS) {
+  for (const p of personas) {
     n++;
-    const bankAccount = config.demoBankAccounts[n - 1] ?? String(ACCOUNT_BASE + n * 1111).padStart(10, '0');
+    const bankAccount = p.sandbox?.bankAccount ?? config.demoBankAccounts[n - 1] ?? String(ACCOUNT_BASE + n * 1111).padStart(10, '0');
     (hist.bank as SimulatedBank).setBalance(bankAccount, 100_000_000_00n, p.name);
     const { merchant } = onboardMerchant(db, {
-      phone: p.phone, fullName: p.name, bvn: `2230000${String(n).padStart(4, '0')}`, bankAccount, language: p.language, rateBps: p.rateBps,
+      phone: p.phone, fullName: p.name, bvn: p.sandbox?.bvn ?? `2230000${String(n).padStart(4, '0')}`, bankAccount, language: p.language, rateBps: p.rateBps,
       buffer: p.bufferNaira ? BigInt(p.bufferNaira) * 100n : undefined, at: new Date(sweepCutoff(addDays(today, -p.historyDays - 1)).getTime()),
     });
     out.push({ ...p, merchantId: merchant.id, bankAccount });

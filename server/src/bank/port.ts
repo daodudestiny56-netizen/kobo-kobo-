@@ -61,6 +61,7 @@ export interface TransferResult {
 export interface NameEnquiry {
   nameEnquiryRef: string;
   accountName: string;
+  kycLevel?: number | null;
 }
 
 /** x-test-outcome header values (demo mode only). */
@@ -78,7 +79,18 @@ export interface TransferRequest {
   testOutcome?: TestOutcome;
 }
 
+/** Demo only: a real transfer from a payer account to a trader, so the collector and statements see a genuine credit. */
+export interface PayIn {
+  sourceAccount: string;
+  destinationAccount: string;
+  amount: Kobo;
+  reference: string;
+  idempotencyKey: string;
+}
+
 export interface BankPort {
+  /** Optional: only banks that can move demo money implement it (the real sandbox client does). */
+  payIn?(req: PayIn): Promise<TransferResult>;
   getBalance(account: string): Promise<Kobo>;
   nameEnquiry(destinationAccount: string): Promise<NameEnquiry>;
   transfer(req: TransferRequest): Promise<TransferResult>;

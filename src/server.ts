@@ -19,7 +19,8 @@ const engineRuntime = registerEngineRuntime(app, db, bank, hasKey);
 app.addHook("onClose", async () => engineRuntime.stop());
 if (hasKey) startCollector();
 await app.register(webhookPlugin);
-await app.register(onboardingRoutes);
+// The web app reads the new trader back as its Merchant shape, so the engine maps the result.
+await app.register(onboardingRoutes, { mapResult: (r: { merchantId: string }) => engineRuntime.merchantView(r.merchantId) });
 
 app.get("/healthz", async () => {
   db.prepare("SELECT 1").get();

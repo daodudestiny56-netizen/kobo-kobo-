@@ -125,3 +125,14 @@ export function setLanguage(db: Db, id: string, language: Language): Merchant {
   db.prepare(`UPDATE merchants SET language = ? WHERE id = ?`).run(language, id);
   return getMerchant(db, id);
 }
+
+/** A cancelled trader comes back: the plan restarts, with a fresh consent. Savings were never touched. */
+export function reactivateMerchant(db: Db, id: string, now: Date): Merchant {
+  const m = getMerchant(db, id);
+  if (m.status === 'ACTIVE') return m;
+  tx(db, () => {
+    db.prepare(`UPDATE merchants SET status = 'ACTIVE', paused_until = NULL WHERE id = ?`).run(id);
+    db.prepare('INSERT INTO consents (id, merchant_id, text_version, given_at) VALUES (?,?,?,?)').run(randomUUID(), id, CONSENT_TEXT_VERSION, now.toISOString());
+  });
+  return getMerchant(db, id);
+}

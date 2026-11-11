@@ -2,71 +2,64 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { Deps } from '../deps';
 import { AppError } from '../errors';
-import { cancelMerchant, getMerchant, LANGUAGES, onboardMerchant, setLanguage, type Merchant } from '../merchants/service';
-import { merchantSummary } from '../merchants/summary';
+import { findMerchantByPhone, getMerchant, LANGUAGES, onboardMerchant, reactivateMerchant, cancelMerchant, setLanguage, type Merchant } from '../merchants/service';
 import { listMessages } from '../messages/service';
 import { parseNaira, parsePositiveNaira } from '../money';
 import { normalizePhone } from '../phone';
 import { getOpenSuggestion, respondToSuggestion } from '../smart-rate/service';
-import { requestWithdrawal, listWithdrawals } from '../withdrawals/service';
-import { maskAccount, pause, resume, setRate } from '../channels/actions';
-import { mapSweep } from '../sweeps/engine';
-import { listInflows } from '../inflows/service';
+import { requestWithdrawal } from '../withdrawals/service';
+import { pause, resume, setRate } from '../channels/actions';
+import { webActivity, webFeed, webMerchant, webSummary } from '../web/mappers';
+import { tierOf } from '../demo/traders';
 import { hasOpsAccess } from './auth';
 import { ok } from './respond';
 
 const id = z.object({ id: z.string().uuid() });
 const naira = z.union([z.string(), z.number()]);
-
-/** A merchant as the app sees it: the bank account is masked and nothing secret is included. */
-const publicMerchant = (m: Merchant) => ({
-  id: m.id, phone: m.phone, fullName: m.fullName, bankAccountMasked: maskAccount(m.bankAccount), language: m.language,
-  rateBps: m.rateBps, dailyCap: m.dailyCap, buffer: m.buffer, pausedUntil: m.pausedUntil, status: m.status, createdAt: m.createdAt,
-});
+const LANG = z.enum(LANGUAGES as [string, ...string[]]);
+/** The sandbox accepts this one-time code (Forge guide 5.4); sign-in reuses it. */
+const DEMO_OTP = '123456';
 
 export function merchantRoutes(app: FastifyInstance, deps: Deps): void {
-  // Sign-up. The verified flow (BVN and name enquiry through the bank) is Abiodun's: it should call onboardMerchant
-  // after its checks. Until then this is open in demo mode and ops-only otherwise.
+  // Direct enrolment for development and tests. The real sign-up is POST /merchants/onboard (BVN, name match, consent).
   app.post('/merchants', async (req: FastifyRequest, reply) => {
     if (!deps.config.demoMode && !hasOpsAccess(deps, req)) throw new AppError('UNAUTHORIZED', 'Sign-up is not open.', 401);
     const b = z
       .object({
-        phone: z.string(), full_name: z.string().min(2).max(100), bvn: z.string().regex(/^\d{11}$/), bank_account: z.string().regex(/^\d{10}$/),
-        language: z.enum(LANGUAGES as [string, ...string[]]).optional(), rate_bps: z.number().int().optional(),
-        daily_cap_naira: naira.optional(), buffer_naira: naira.optional(),
+        phone: z.string(), fullName: z.string().min(2).max(100), bvn: z.string().regex(/^\d{11}$/), bankAccount: z.string().regex(/^\d{10}$/),
+        language: LANG.optional(), rateBps: z.number().int().optional(), dailyCapNaira: naira.optional(), bufferNaira: naira.optional(),
       })
       .parse(req.body);
     const phone = normalizePhone(b.phone);
     if (!phone) throw new AppError('INVALID_PHONE', 'Enter a valid Nigerian phone number.', 400);
-    const { merchant, rsaPin } = onboardMerchant(deps.db, {
-      phone, fullName: b.full_name, bvn: b.bvn, bankAccount: b.bank_account, language: b.language as Merchant['language'] | undefined, rateBps: b.rate_bps,
-      dailyCap: b.daily_cap_naira === undefined ? undefined : parsePositiveNaira(b.daily_cap_naira),
-      buffer: b.buffer_naira === undefined ? undefined : parseNaira(b.buffer_naira),
+    const { merchant } = onboardMerchant(deps.db, {
+      phone, fullName: b.fullName, bvn: b.bvn, bankAccount: b.bankAccount, language: b.language as Merchant['language'] | undefined, rateBps: b.rateBps,
+      dailyCap: b.dailyCapNaira === undefined ? undefined : parsePositiveNaira(b.dailyCapNaira),
+      buffer: b.bufferNaira === undefined ? undefined : parseNaira(b.bufferNaira),
       at: deps.clock(),
     });
-    return reply.status(201).send(ok({ merchant: publicMerchant(merchant), rsaPin }));
+    return reply.status(201).send(ok(webMerchant(deps, merchant)));
   });
 
-  app.get('/merchants/:id/summary', async (req) => {
-    const { id: mid } = id.parse(req.params);
-    const s = merchantSummary(deps, mid);
-    const { merchant, ...rest } = s;
-    return ok({ merchant: publicMerchant(merchant), ...rest, openSuggestion: getOpenSuggestion(deps, mid), collectionAccount: deps.config.collectionLabel });
-  });
+  app.get('/merchants/:id/summary', async (req) => ok(await webSummary(deps, id.parse(req.params).id)));
+  app.get('/merchants/:id/activity', async (req) => ok(webActivity(deps, id.parse(req.params).id)));
+  app.get('/merchants/:id/feed', async (req) => ok(webFeed(deps, id.parse(req.params).id)));
 
+  // pauseHours: 0 resumes. Returns the fresh summary so the screen can redraw from one response.
   app.patch('/merchants/:id/settings', async (req) => {
     const { id: mid } = id.parse(req.params);
     const b = z
-      .object({ rate_bps: z.number().int().optional(), paused: z.boolean().optional(), pause_hours: z.number().positive().max(24 * 365).optional(), language: z.string().optional(), cancel: z.literal(true).optional() })
+      .object({ rateBps: z.number().int().optional(), language: LANG.optional(), pauseHours: z.number().min(0).max(24 * 365).optional(), cancel: z.literal(true).optional(), reactivate: z.literal(true).optional() })
       .strict()
       .parse(req.body);
-    if (getMerchant(deps.db, mid).status === 'CANCELLED') throw new AppError('PLAN_CANCELLED', 'This plan is cancelled.', 409);
-    if (b.rate_bps !== undefined) setRate(deps, mid, b.rate_bps);
+    const m = getMerchant(deps.db, mid);
+    if (b.reactivate) reactivateMerchant(deps.db, mid, deps.clock());
+    else if (m.status === 'CANCELLED') throw new AppError('PLAN_CANCELLED', 'This plan is cancelled. Reactivate it first.', 409);
+    if (b.rateBps !== undefined) setRate(deps, mid, b.rateBps);
     if (b.language !== undefined) setLanguage(deps.db, mid, b.language as Merchant['language']);
-    if (b.paused === true) pause(deps, mid, b.pause_hours);
-    if (b.paused === false) resume(deps, mid);
+    if (b.pauseHours !== undefined) b.pauseHours === 0 ? resume(deps, mid) : pause(deps, mid, b.pauseHours);
     if (b.cancel) cancelMerchant(deps.db, mid, deps.clock());
-    return ok({ merchant: publicMerchant(getMerchant(deps.db, mid)) });
+    return ok(await webSummary(deps, mid));
   });
 
   app.get('/merchants/:id/messages', async (req) => {
@@ -76,31 +69,18 @@ export function merchantRoutes(app: FastifyInstance, deps: Deps): void {
     return ok({ messages: listMessages(deps.db, mid, limit) });
   });
 
-  app.get('/merchants/:id/sweeps', async (req) => {
-    const { id: mid } = id.parse(req.params);
-    getMerchant(deps.db, mid);
-    const rows = deps.db.prepare('SELECT * FROM sweeps WHERE merchant_id = ? ORDER BY sweep_date DESC LIMIT 60').all(mid) as any[];
-    return ok({ sweeps: rows.map(mapSweep) });
-  });
-
-  app.get('/merchants/:id/inflows', async (req) => {
-    const { id: mid } = id.parse(req.params);
-    getMerchant(deps.db, mid);
-    return ok({ inflows: listInflows(deps, mid) });
-  });
-
-  app.get('/merchants/:id/withdrawals', async (req) => {
-    const { id: mid } = id.parse(req.params);
-    getMerchant(deps.db, mid);
-    return ok({ withdrawals: listWithdrawals(deps.db, mid) });
-  });
-
-  // A refusal is a normal answer, not an error: 200 with accepted:false and the same sentence USSD and SMS show.
+  // A refusal is a normal answer, not an error: ok:false with the same sentence USSD and SMS show.
   app.post('/withdrawals', async (req) => {
-    const b = z.object({ merchant_id: z.string().uuid(), amount_naira: naira, pot: z.enum(['EMERGENCY', 'RETIREMENT']).default('EMERGENCY') }).parse(req.body);
-    getMerchant(deps.db, b.merchant_id);
-    const r = await requestWithdrawal(deps, b.merchant_id, parsePositiveNaira(b.amount_naira), b.pot);
-    return ok({ accepted: r.accepted, message: r.message, withdrawal: r.withdrawal });
+    // The app sends amountKobo for the Emergency Pot. `pot` and amountNaira exist so a Retirement Pot request is
+    // answered with the "locked until 50" refusal rather than ignored.
+    const b = z
+      .object({ merchantId: z.string().uuid(), amountKobo: z.number().int().positive().optional(), amountNaira: naira.optional(), pot: z.enum(['EMERGENCY', 'RETIREMENT']).default('EMERGENCY') })
+      .refine((x) => (x.amountKobo === undefined) !== (x.amountNaira === undefined), { message: 'send exactly one of amountKobo or amountNaira' })
+      .parse(req.body);
+    getMerchant(deps.db, b.merchantId);
+    const amount = b.amountKobo !== undefined ? BigInt(b.amountKobo) : parsePositiveNaira(b.amountNaira!);
+    const r = await requestWithdrawal(deps, b.merchantId, amount, b.pot);
+    return ok({ ok: r.accepted, message: r.message });
   });
 
   app.get('/merchants/:id/suggestion', async (req) => {
@@ -116,5 +96,23 @@ export function merchantRoutes(app: FastifyInstance, deps: Deps): void {
     const r = respondToSuggestion(deps, { merchantId: mid, decision: b.decision === 'accept' ? 'ACCEPT' : 'DECLINE' });
     if (r.outcome === 'NONE') throw new AppError('NO_OPEN_SUGGESTION', 'There is no suggestion waiting.', 404);
     return ok(r);
+  });
+
+  // Sign-up helpers. The account name comes from the bank's name enquiry.
+  app.get('/identity/resolve', async (req) => {
+    const { account } = z.object({ account: z.string().regex(/^\d{10}$/, 'account must be 10 digits') }).parse(req.query);
+    const ne = await deps.bank.nameEnquiry(account).catch((e) => {
+      if ((e as { code?: string }).code === 'ACCOUNT_NOT_FOUND') throw new AppError('ACCOUNT_NOT_FOUND', 'We could not find that account.', 404);
+      throw new AppError('BANK_UNAVAILABLE', 'Bank check failed, try again.', 502);
+    });
+    return ok({ name: ne.accountName, tier: ne.kycLevel ?? tierOf(account) });
+  });
+
+  app.post('/auth/verify-otp', async (req) => {
+    const b = z.object({ phone: z.string(), code: z.string() }).parse(req.body);
+    if (b.code !== DEMO_OTP) throw new AppError('INVALID_OTP', 'That code is not right.', 401);
+    const phone = normalizePhone(b.phone);
+    const m = phone ? findMerchantByPhone(deps.db, phone) : null;
+    return ok({ merchantId: m?.id ?? null });
   });
 }
