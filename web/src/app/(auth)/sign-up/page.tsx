@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Check, Lock, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Check, Lock, TriangleAlert } from 'lucide-react';
 import { api } from '@/lib/api';
-import type { DemoTrader, Lang, Merchant } from '@/lib/api/types';
-import { naira } from '@/lib/money';
+import type { Consent, DemoTrader, Lang, OnboardResult } from '@/lib/api/types';
+import { onboardProblem, type OnboardField } from '@/lib/onboarding';
 import { useSession } from '@/lib/session';
-import { isElevenDigits, isPhone, normalisePhone, plainError } from '@/lib/text';
+import { displayName, firstName, isPhone, normalisePhone } from '@/lib/text';
 import { AuthFrame } from '@/components/AuthFrame';
 
 const LANGS: { v: Lang; label: string }[] = [
@@ -18,108 +19,105 @@ const LANGS: { v: Lang; label: string }[] = [
   { v: 'igbo', label: 'Igbo' },
 ];
 
-const CONSENT =
-  "I agree that Kobo Kobo may move my chosen share of each day's sales from my bank account into my Access ARM pension. I can pause, change or stop this at any time. I understand that pension returns are not guaranteed.";
+const STEPS = ['Your details', 'Review and agree'];
 
-const STEPS = ['Phone', 'Identity', 'Account', 'Your share', 'Agree'];
+type FieldErrors = Partial<Record<OnboardField, string>>;
 
 export default function SignUpPage() {
   const router = useRouter();
   const { signIn, demoMode } = useSession();
-  const [step, setStep] = useState(0);
-  const [done, setDone] = useState<Merchant | null>(null);
+  const [step, setStep] = useState<0 | 1>(0);
+  const [done, setDone] = useState<(OnboardResult & { bankAccount: string }) | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
 
-  // step 0
   const [phone, setPhone] = useState('');
-  const [codeSent, setCodeSent] = useState(false);
-  const [code, setCode] = useState('');
-  // step 1
   const [bvn, setBvn] = useState('');
-  const [nin, setNin] = useState('');
-  // step 2
-  const [account, setAccount] = useState('');
-  const [resolved, setResolved] = useState<{ name: string; tier: number } | null>(null);
-  const [mine, setMine] = useState(false);
-  // step 3
-  const [rateBps, setRateBps] = useState(200);
+  const [bankAccount, setBankAccount] = useState('');
   const [language, setLanguage] = useState<Lang>('pidgin');
-  // step 4
-  const [consent, setConsent] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [notice, setNotice] = useState<{ message: string; signIn?: boolean } | null>(null);
+
+  const [consent, setConsent] = useState<Consent | null>(null);
+  const [consentError, setConsentError] = useState(false);
+  const [agreed, setAgreed] = useState(false);
 
   const [traders, setTraders] = useState<DemoTrader[]>([]);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+
+  // After a failed step or submit, bring the problem into view: the first invalid field, otherwise the notice.
   useEffect(() => {
-    api.listDemoTraders().then(setTraders).catch(() => setTraders([]));
+    if (!notice && Object.keys(fieldErrors).length === 0) return;
+    const el = document.querySelector<HTMLElement>('[aria-invalid="true"]') ?? noticeRef.current;
+    if (!el) return;
+    const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ block: 'center', behavior: calm ? 'auto' : 'smooth' });
+    el.focus({ preventScroll: true });
+  }, [notice, fieldErrors, step]);
+
+  // The consent text and its version come from the server, so what the person agrees to is exactly what is recorded.
+  const loadConsent = useCallback(() => {
+    setConsentError(false);
+    api.consent().then(setConsent).catch(() => setConsentError(true));
   }, []);
+
+  useEffect(() => {
+    loadConsent();
+    api.listDemoTraders().then(setTraders).catch(() => setTraders([]));
+  }, [loadConsent]);
 
   function fill(t: DemoTrader) {
     setPhone(t.phone);
     setBvn(t.bvn);
-    setNin(t.nin);
-    setAccount(t.bankAccount);
+    setBankAccount(t.bankAccount);
     setLanguage(t.language);
-    setResolved(null);
-    setMine(false);
-    setError('');
+    setFieldErrors({});
+    setNotice(null);
+    setStep(0);
   }
 
-  const back = () => {
-    setError('');
-    setStep((s) => Math.max(0, s - 1));
-  };
+  function validateDetails(): boolean {
+    const errs: FieldErrors = {};
+    if (!isPhone(normalisePhone(phone))) errs.phone = 'Enter your Nigerian mobile number, for example 0803 123 4567.';
+    if (!/^\d{11}$/.test(bvn)) errs.bvn = 'Your BVN is 11 digits. Dial *565*0# on the phone linked to your bank to get it.';
+    if (!/^\d{10}$/.test(bankAccount)) errs.bankAccount = 'A bank account number is 10 digits.';
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
 
-  async function next() {
-    setError('');
-    if (step === 0) {
-      const p = normalisePhone(phone);
-      if (!isPhone(p)) return setError('Enter your Nigerian mobile number, for example 0803 123 4567.');
-      setPhone(p);
-      if (!codeSent) return setCodeSent(true);
-      setBusy(true);
-      try {
-        await api.verifyOtp(p, code.trim());
-        setStep(1);
-      } catch (e) {
-        setError(plainError(e));
-      } finally {
-        setBusy(false);
+  function toReview() {
+    setNotice(null);
+    if (validateDetails()) setStep(1);
+  }
+
+  async function submit() {
+    setNotice(null);
+    if (!agreed) {
+      setNotice({ message: 'Please agree to the terms to continue.' });
+      return;
+    }
+    if (!consent) return;
+    setBusy(true);
+    try {
+      const r = await api.onboard({
+        phone: normalisePhone(phone),
+        bankAccount,
+        bvn,
+        language,
+        consentAccepted: true,
+        consentVersion: consent.version,
+      });
+      setDone({ ...r, bankAccount });
+    } catch (e) {
+      const p = onboardProblem(e);
+      setStep(p.step);
+      setFieldErrors(p.field ? { [p.field]: p.message } : {});
+      if (!p.field) setNotice({ message: p.message, signIn: p.signIn });
+      if (p.reloadConsent) {
+        setAgreed(false);
+        loadConsent();
       }
-    } else if (step === 1) {
-      if (!isElevenDigits(bvn)) return setError('Your BVN is 11 digits. Dial *565*0# on the phone linked to your bank to get it.');
-      if (!isElevenDigits(nin)) return setError('Your NIN is 11 digits. Check your NIN slip or the NIMC app.');
-      setStep(2);
-    } else if (step === 2) {
-      if (!resolved) {
-        if (!/^\d{10}$/.test(account)) return setError('A bank account number is 10 digits.');
-        setBusy(true);
-        try {
-          setResolved(await api.resolveAccount(account));
-        } catch (e) {
-          setError(plainError(e));
-        } finally {
-          setBusy(false);
-        }
-        return;
-      }
-      if (!mine) return setError('Please confirm this is your account.');
-      setStep(3);
-    } else if (step === 3) {
-      setStep(4);
-    } else {
-      if (!consent) return setError('Please agree to continue.');
-      setBusy(true);
-      try {
-        const m = await api.onboard({ bankAccount: account, bvn, nin, phone, language, rateBps, consent });
-        setDone(m);
-      } catch (e) {
-        const msg = plainError(e);
-        setError(msg);
-        // Identity problems belong on the identity step.
-        if (/bvn|nin|identity/i.test(msg)) setStep(1);
-      } finally {
-        setBusy(false);
-      }
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -127,138 +125,110 @@ export default function SignUpPage() {
     return (
       <AuthFrame>
         <p className="item-icon brand" style={{ width: 56, height: 56 }}><Check size={28} aria-hidden /></p>
-        <h1 className="h1 mt4">You are in, {done.fullName.split(' ')[0]}</h1>
-        <p className="muted mt2">Your identity checked out and your account name matched. Your sales keep landing in your own account. We only move the share you chose, each night.</p>
+        <h1 className="h1 mt4">You are in, {firstName(done.fullName)}</h1>
+        <p className="muted mt2">Your BVN was verified and the name matched your account. Your sales keep landing in your own account. We only move your share, each night.</p>
         <ul className="facts mt5">
-          <li><span className="k">Your account</span><span className="v">{done.bankAccount}</span></li>
-          <li><span className="k">Pension fund manager</span><span className="v">Access ARM Pensions</span></li>
-          <li><span className="k">Pension number (RSA PIN)</span><span className="v">{done.rsaPin}</span></li>
-          <li><span className="k">Your share</span><span className="v">{rateBps / 100}% of daily sales</span></li>
+          <li><span className="k">Name</span><span className="v">{displayName(done.fullName)}</span></li>
+          <li><span className="k">Your account</span><span className="v mono">{done.bankAccount}</span></li>
+          {done.rsaPin && <li><span className="k">Pension number (RSA PIN)</span><span className="v mono">{done.rsaPin}</span></li>}
+          <li><span className="k">Your share</span><span className="v">{done.rateBps / 100}% of daily sales</span></li>
         </ul>
-        <button className="btn btn-primary btn-block mt5" onClick={() => { signIn(done.id); router.push('/home'); }}>Go to my pension</button>
+        <p className="hint mt3">You can change your share any time in Settings, under Saving plan.</p>
+        <button className="btn btn-primary btn-block mt5" onClick={() => { signIn(done.merchantId); router.push('/home'); }}>Go to my pension</button>
       </AuthFrame>
     );
   }
 
-  const titles = [
-    codeSent ? 'Enter your code' : 'Your phone number',
-    'Confirm who you are',
-    'Link your bank account',
-    'Choose your share',
-    'Review and agree',
-  ];
+  const langLabel = LANGS.find((l) => l.v === language)?.label ?? language;
+
+  const noticeEl = notice && (
+    <p ref={noticeRef} tabIndex={-1} className="notice notice-attn mt4" role="alert">
+      <TriangleAlert size={20} aria-hidden />
+      <span>
+        {notice.message}
+        {notice.signIn && <> <Link href="/sign-in" style={{ fontWeight: 700 }}>Sign in</Link></>}
+      </span>
+    </p>
+  );
 
   return (
     <AuthFrame aside={{ text: 'Have an account?', href: '/sign-in', label: 'Sign in' }}>
       <ol className="steps" aria-label={`Step ${step + 1} of ${STEPS.length}: ${STEPS[step]}`}>
         {STEPS.map((s, i) => <li key={s} data-done={i <= step} />)}
       </ol>
-      {step > 0 && (
-        <button className="back mt3" onClick={back} type="button"><ArrowLeft size={18} aria-hidden /> Back</button>
+      {step === 1 && (
+        <button className="back mt3" onClick={() => { setNotice(null); setStep(0); }} type="button"><ArrowLeft size={18} aria-hidden /> Back</button>
       )}
-      <h1 className="h1 mt4">{titles[step]}</h1>
+      <h1 className="h1 mt4">{step === 0 ? 'Open your pension' : 'Review and agree'}</h1>
+
+      {step === 0 && noticeEl}
 
       {step === 0 && (
-        <div className="mt5">
-          {!codeSent ? (
-            <>
-              <p className="muted">We use your number to text you receipts and to sign you in. It takes about 3 minutes to join. Have your BVN, NIN and bank account number ready.</p>
-              <div className="field mt5">
-                <label className="label" htmlFor="phone">Mobile number</label>
-                <input id="phone" className={`input ${error ? 'is-invalid' : ''}`} inputMode="tel" autoComplete="tel" placeholder="0803 123 4567" value={phone} onChange={(e) => setPhone(e.target.value)} />
-              </div>
-            </>
-          ) : (
-            <div className="field">
-              <p className="muted">We sent a 6-digit code to {phone}.</p>
-              <label className="label mt3" htmlFor="code">6-digit code</label>
-              <input id="code" className={`input ${error ? 'is-invalid' : ''}`} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="123456" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
-              {demoMode && <p className="hint">Demo code: 123456</p>}
-            </div>
-          )}
-        </div>
-      )}
+        <form className="mt5" onSubmit={(e) => { e.preventDefault(); toReview(); }} noValidate>
+          <p className="muted">It takes about 2 minutes. Have your BVN and the number of the bank account your customers pay into ready.</p>
 
-      {step === 1 && (
-        <div className="mt5">
-          <p className="notice notice-brand"><ShieldCheck size={20} aria-hidden /><span>We only check your identity. This does not move any money or open any loan.</span></p>
           <div className="field mt5">
-            <label className="label" htmlFor="bvn">BVN</label>
-            <input id="bvn" className="input" inputMode="numeric" maxLength={11} value={bvn} onChange={(e) => setBvn(e.target.value.replace(/\D/g, ''))} aria-describedby="bvn-h" />
-            <p id="bvn-h" className="hint">11 digits. Dial *565*0# on the phone linked to your bank.</p>
+            <label className="label" htmlFor="phone">Mobile number</label>
+            <input id="phone" className={`input ${fieldErrors.phone ? 'is-invalid' : ''}`} inputMode="tel" autoComplete="tel" placeholder="0803 123 4567" value={phone} onChange={(e) => setPhone(e.target.value)} aria-describedby="phone-h" aria-invalid={!!fieldErrors.phone} />
+            <p id="phone-h" className={fieldErrors.phone ? 'error-text' : 'hint'} role={fieldErrors.phone ? 'alert' : undefined}>{fieldErrors.phone ?? 'We text your receipts here.'}</p>
           </div>
+
           <div className="field">
-            <label className="label" htmlFor="nin">NIN</label>
-            <input id="nin" className="input" inputMode="numeric" maxLength={11} value={nin} onChange={(e) => setNin(e.target.value.replace(/\D/g, ''))} aria-describedby="nin-h" />
-            <p id="nin-h" className="hint">11 digits, from your NIN slip or the NIMC app.</p>
+            <label className="label" htmlFor="bvn">BVN</label>
+            <input id="bvn" className={`input ${fieldErrors.bvn ? 'is-invalid' : ''}`} inputMode="numeric" maxLength={11} value={bvn} onChange={(e) => setBvn(e.target.value.replace(/\D/g, ''))} aria-describedby="bvn-h" aria-invalid={!!fieldErrors.bvn} />
+            <p id="bvn-h" className={fieldErrors.bvn ? 'error-text' : 'hint'} role={fieldErrors.bvn ? 'alert' : undefined}>{fieldErrors.bvn ?? '11 digits. Dial *565*0# on the phone linked to your bank.'}</p>
           </div>
-        </div>
-      )}
 
-      {step === 2 && (
-        <div className="mt5">
-          <p className="muted">This is the account your customers pay into. Your sales stay here. Nothing is taken until the nightly saving.</p>
-          <div className="field mt5">
-            <label className="label" htmlFor="acct">Account number</label>
-            <input id="acct" className={`input ${error ? 'is-invalid' : ''}`} inputMode="numeric" maxLength={10} value={account} onChange={(e) => { setAccount(e.target.value.replace(/\D/g, '')); setResolved(null); setMine(false); }} />
+          <div className="field">
+            <label className="label" htmlFor="acct">Bank account number</label>
+            <input id="acct" className={`input ${fieldErrors.bankAccount ? 'is-invalid' : ''}`} inputMode="numeric" maxLength={10} value={bankAccount} onChange={(e) => setBankAccount(e.target.value.replace(/\D/g, ''))} aria-describedby="acct-h" aria-invalid={!!fieldErrors.bankAccount} />
+            <p id="acct-h" className={fieldErrors.bankAccount ? 'error-text' : 'hint'} role={fieldErrors.bankAccount ? 'alert' : undefined}>{fieldErrors.bankAccount ?? 'The account your customers pay into. It must be in your own name.'}</p>
           </div>
-          {resolved && (
-            <>
-              <p className="notice notice-brand mt4"><Check size={20} aria-hidden /><span><span className="notice-title">{resolved.name}</span><br /><span className="small">Xtradot Bank · Tier {resolved.tier}</span></span></p>
-              <label className="choice mt3">
-                <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} />
-                <span className="choice-title">Yes, this is my account</span>
-              </label>
-            </>
-          )}
-        </div>
-      )}
 
-      {step === 3 && (
-        <div className="mt5">
-          <p className="muted">Each night we move this share of that day&apos;s sales into your pension. If you sell nothing, we take nothing.</p>
-          <div className="choices mt5" role="radiogroup" aria-label="Your share of daily sales">
-            {[100, 200, 300, 400, 500].map((b) => (
-              <label key={b} className="choice">
-                <input type="radio" name="rate" checked={rateBps === b} onChange={() => setRateBps(b)} />
-                <span>
-                  <span className="choice-title">{b / 100}% of daily sales{b === 200 ? ' (our suggested start)' : ''}</span>
-                  <br />
-                  <span className="hint">On a {naira(3_000_000)} day, that is {naira(Math.floor((3_000_000 * b) / 10_000))}.</span>
-                </span>
-              </label>
-            ))}
-          </div>
-          <div className="field mt5">
+          <div className="field">
             <label className="label" htmlFor="lang">Language for messages</label>
             <select id="lang" className="select" value={language} onChange={(e) => setLanguage(e.target.value as Lang)}>
               {LANGS.map((l) => <option key={l.v} value={l.v}>{l.label}</option>)}
             </select>
           </div>
-        </div>
+
+          <button className="btn btn-primary btn-block mt5" type="submit">Continue</button>
+        </form>
       )}
 
-      {step === 4 && (
+      {step === 1 && (
         <div className="mt5">
           <ul className="facts">
-            <li><span className="k">Name</span><span className="v">{resolved?.name}</span></li>
-            <li><span className="k">Account</span><span className="v">{account}</span></li>
-            <li><span className="k">Your share</span><span className="v">{rateBps / 100}% of daily sales</span></li>
-            <li><span className="k">Half goes to</span><span className="v">Emergency pot, open after 3 months</span></li>
-            <li><span className="k">Half goes to</span><span className="v">Retirement pot, locked until 50</span></li>
+            <li><span className="k">Mobile number</span><span className="v">{normalisePhone(phone)}</span></li>
+            <li><span className="k">BVN</span><span className="v mono">{'•'.repeat(8)}{bvn.slice(-3)}</span></li>
+            <li><span className="k">Bank account</span><span className="v mono">{bankAccount}</span></li>
+            <li><span className="k">Language</span><span className="v">{langLabel}</span></li>
+            <li><span className="k">Your share</span><span className="v">2% of daily sales to start</span></li>
           </ul>
-          <label className="choice mt5">
-            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-            <span className="small">{CONSENT}</span>
+
+          <h2 className="h2 mt6">Terms</h2>
+          {consent ? (
+            <div className="panel mt3">
+              <p className="small" style={{ color: 'var(--ink-2)' }}>{consent.text}</p>
+            </div>
+          ) : consentError ? (
+            <p className="notice notice-attn mt3" role="alert">
+              <TriangleAlert size={20} aria-hidden />
+              <span>We could not load the terms. <button type="button" className="btn btn-text" onClick={loadConsent}>Try again</button></span>
+            </p>
+          ) : (
+            <div className="skeleton mt3" style={{ height: 120 }} aria-busy="true" />
+          )}
+
+          <label className="choice mt4">
+            <input type="checkbox" checked={agreed} onChange={(e) => { setAgreed(e.target.checked); setNotice(null); }} disabled={!consent} />
+            <span className="small">I have read and agree to these terms.</span>
           </label>
+
+          {step === 1 && noticeEl}
+          <button className="btn btn-primary btn-block mt5" onClick={submit} disabled={busy || !consent}>{busy ? 'Opening your pension...' : 'Start saving'}</button>
         </div>
       )}
-
-      {error && <p className="error-text mt4" role="alert">{error}</p>}
-
-      <button className="btn btn-primary btn-block mt5" onClick={next} disabled={busy || (step === 0 && codeSent && code.length !== 6)}>
-        {busy ? 'Checking...' : step === 0 && !codeSent ? 'Send code' : step === 2 && !resolved ? 'Check account' : step === 4 ? 'Start saving' : 'Continue'}
-      </button>
 
       <p className="small muted mt4 row" style={{ alignItems: 'flex-start' }}>
         <Lock size={16} aria-hidden style={{ marginTop: 3, flexShrink: 0 }} />
@@ -270,7 +240,7 @@ export default function SignUpPage() {
           <summary>Use a demo account</summary>
           <div className="row wrap mt3">
             {traders.map((t) => (
-              <button key={t.bankAccount} className="btn btn-secondary btn-sm"  onClick={() => { fill(t); setCodeSent(false); setCode(''); setStep(0); }}>
+              <button key={t.bankAccount} className="btn btn-secondary btn-sm" type="button" onClick={() => fill(t)}>
                 {t.fullName.split(' ')[0]}
               </button>
             ))}

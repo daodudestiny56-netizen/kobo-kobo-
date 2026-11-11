@@ -64,8 +64,8 @@ export default function SignInPage() {
   async function demo(account: string) {
     setBusy(true);
     try {
-      const m = await api.demoSignIn(account);
-      signIn(m.id);
+      const { merchantId: id } = await api.demoSignIn(account);
+      signIn(id);
       router.push('/home');
     } catch (err) {
       setError(plainError(err));
