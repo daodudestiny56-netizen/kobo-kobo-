@@ -14,20 +14,28 @@ By default the app runs on a **built-in mock API** that lives in the browser (`s
 
 **Demo controls** (simulate a customer paying, run tonight's saving, skip time, button phone, operations console) are on by default with the mock API and off with the live API. Turn them on or off in Settings, About, or add `?demo=1` or `?demo=0` to any URL.
 
-To use the real backend:
+## Live mode (the real backend)
 
 ```
-NEXT_PUBLIC_API_MODE=live API_BASE_URL=https://team07.xtradot.co npm run dev
+NEXT_PUBLIC_API_MODE=live API_BASE_URL=http://localhost:8080 npm run dev
 ```
 
-The browser always calls relative `/api/v1/...`. `API_BASE_URL` only tells the dev server where to forward them.
+The browser always calls relative `/api/v1/...`; `API_BASE_URL` tells the Next.js server where to forward them.
+
+**Both variables are read when the app is built, not when it starts.** `NEXT_PUBLIC_API_MODE` is inlined into the browser code, and the rewrite target is fixed in the build. For a production image, pass them as build arguments (`next build`), not container environment variables.
+
+In live mode the demo controls are off by default. Open the site once with `?demo=1` to show Demo tools, Button phone and Operations (it is remembered in that browser, and can be turned off in Settings, About).
+
+The ops and demo endpoints need access: either the server runs with `DEMO_OPEN=1`, or the person types the shared key into the **Demo key** box the app shows when the server answers 401. It is sent as `x-demo-key` and kept for that browser tab only.
+
+Connection hiccups: reads are retried once, and settings updates too (they only set a value). Anything that moves money is never retried.
 
 ## Pages
 
 | Area | Routes |
 |---|---|
 | Public | `/` landing, `/help`, `/terms`, `/privacy` |
-| Auth | `/sign-in` (phone and text code), `/sign-up` (5 steps) |
+| Auth | `/sign-in` (phone and text code), `/sign-up` (2 steps: details, then review and agree) |
 | Trader app | `/home` (dashboard), `/savings`, `/savings/withdraw`, `/transactions`, `/transactions/[id]` (receipt), `/notifications`, `/settings/{profile,account,plan,messages,security,about}` |
 | Demo | `/demo/phone` (button phone, USSD and SMS) |
 | Operations | `/ops`, `/ops/sweeps`, `/ops/alerts` |
@@ -39,25 +47,25 @@ The browser always calls relative `/api/v1/...`. `API_BASE_URL` only tells the d
 - Lucide icons only. Photos are the team's licensed Wikimedia Commons photos (credits in the site footer).
 - Every sweep state has plain-language wording in `src/lib/activity.ts`.
 
-## API the live mode expects
+## API the live mode calls
 
-All under `/api/v1`. Items marked **new** are not in PRD section 15 yet.
+All under `/api/v1`. Success is `{ status: "success", data }` and failure is `{ status: "error", error: { code, message, field? } }` (onboarding answers `{ error: { code, message, field? } }`); both become an `ApiError`. Money is integer kobo and every time is epoch milliseconds. Verified end to end against the real backend (`main` plus the web-contract patch) using the mock bank.
 
 | Call | Used by |
 |---|---|
-| `POST /auth/verify-otp` **new** (`{phone, code}` returns `{merchantId \| null}`) | sign-in, sign-up |
-| `GET /identity/resolve?account=` **new** (returns `{name, tier}`) | sign-up |
-| `POST /merchants/onboard` | sign-up |
-| `GET /merchants/{id}/summary` | every trader screen |
-| `GET /merchants/{id}/activity` **new** (all sweeps, newest first) | savings, receipt, notifications |
-| `GET /merchants/{id}/feed` **new** (customer payments, savings, withdrawals, newest first) | home, transactions |
-| `PATCH /merchants/{id}/settings` (adds `reactivate`) | plan, pause, stop |
-| `POST /withdrawals` | withdraw |
+| `GET /consent`, `POST /merchants/onboard` | sign-up. The response is the whole trader (`id`, `fullName`, `rsaPin`, ...), and the app accepts that or `{merchantId}` |
+| `POST /auth/verify-otp` (code `123456`) | sign-in |
+| `GET /demo/traders`, `POST /demo/sign-in {account}` | demo accounts on the sign-in and sign-up pages |
+| `GET /merchants/{id}/summary`, `/activity`, `/feed` | every trader screen |
+| `PATCH /merchants/{id}/settings` (returns the summary) | plan, pause, stop, language, suggestion |
+| `POST /withdrawals {merchantId, amountKobo}` | withdraw |
 | `POST /ussd`, `POST /sms/inbound` | button phone |
-| `GET /demo/traders`, `POST /demo/sign-in`, `/demo/inflow`, `/demo/clock`, `/demo/reset` **new/demo only** | sign-in shortcuts, Demo tools |
-| `GET /ops/overview`, `GET /ops/merchants`, `POST /ops/sweeps/run`, `POST /ops/sweeps/{id}/requery`, `POST /ops/alerts/{id}/resolve` | operations, button phone |
+| `GET /ops/overview`, `GET /ops/merchants`, `POST /ops/sweeps/run {forceOutcome}`, `POST /ops/sweeps/{id}/requery`, `POST /ops/alerts/{id}/resolve {decision}` | operations, button phone |
+| `GET /demo/clock`, `POST /demo/clock {days}`, `POST /demo/inflow {merchantId, amountKobo}`, `POST /demo/reset` | Demo tools |
 
-Response shapes are the types in `src/lib/api/types.ts`. `GET /merchants/{id}/summary` also returns the linked account, 30-day stats, a 30-day sales and savings series and a 90-day balance series, which the dashboard charts use. In live mode these come from the Xtradot sandbox statements (`GET /transactions`), which are seeded with October 2026 history. Money is integer kobo.
+Onboarding error codes and what the person sees: `IDENTITY_NOT_VERIFIED`, `ACCOUNT_NOT_FOUND`, `ACCOUNT_NOT_ACTIVE`, `NAME_MISMATCH`, `NAME_NEEDS_REVIEW`, `ALREADY_ENROLLED`, `CONSENT_REQUIRED`, `CONSENT_VERSION_MISMATCH`, `INVALID_REQUEST`, `RATE_LIMITED`, `BANK_UNAVAILABLE`. The mapping is in `src/lib/onboarding.ts`, and the mock in `src/lib/api/engine.ts` returns the same codes.
+
+One summary request serves the whole app (`src/lib/session.tsx`), because each summary costs the server a bank balance call and the server's bank limiter is 40 a minute. It reloads after actions and when the tab comes back into view.
 
 ## Deploying
 
@@ -65,6 +73,6 @@ Response shapes are the types in `src/lib/api/types.ts`. `GET /merchants/{id}/su
 
 ## Still to do
 
-- Real staff sign-in for `/ops` and the demo endpoints.
+- Real staff sign-in for `/ops` (today: `DEMO_OPEN=1` or the shared demo key).
 - Yoruba, Hausa and Igbo message text (falls back to English today).
 - Installable PWA icons and a service worker.
