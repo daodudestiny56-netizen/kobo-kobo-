@@ -6,6 +6,8 @@ The AI only **advises**. The app decides and moves the money. Nothing here debit
 
 ## Read this first: the team decision, and what this kit is now
 
+**Status: the TypeScript port is done** (`server/src/intel/sweepguard.ts`, `smartrate.ts`, wired in by `server/src/guard/statistical.ts` and `server/src/smart-rate/analyze.ts`, tests in `server/tests/intel-*.test.ts`). This kit stays as the reference implementation.
+
 **Decision (team lead):** no second service. SweepGuard and SmartRate are ported to **TypeScript as pure functions inside the Node app** (`src/intel/sweepguard.ts`, `src/intel/smartrate.ts`, plain arrays like `{amountKobo, at}`), in-process only, no remote mode, no public `/ai/*`, model calls only from Node.
 
 | In this kit | Role now |

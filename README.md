@@ -249,7 +249,7 @@ cd web && npm run typecheck && npm run build
 | `DEMO_SECRET` | Shared key sent as `x-demo-key` for demo actions. |
 | `IDENTITY_HMAC_KEY` | Secret used to hash BVNs. Set it before onboarding anyone. |
 | `COLLECTION_ACCOUNT` | The stand-in pension collection account (default `0123456793`). |
-| `GUARD_HOLD_ABOVE_NAIRA` | Placeholder SweepGuard: hold any single credit at or above this amount. |
+| `GUARD_HOLD_ABOVE_NAIRA` | Optional fixed ceiling that runs alongside the statistical SweepGuard: also hold any single credit at or above this amount. |
 | `SCHEDULER_ENABLED`, `SWEEP_CRON`, `SWEEP_RETRY_CRON`, `REQUERY_CRON` | Defaults: sweep at 23:00, retry at 23:30, requery every minute. |
 | `NEXT_PUBLIC_API_MODE`, `API_BASE_URL` (web) | `live` switches the web app to the real API. **Read at `next build`, not at start.** |
 
@@ -281,7 +281,7 @@ Never commit `GATEWAY_KEY`, the webhook secret, a kubeconfig or `.env`.
 | Access ARM pension account and RSA PIN | **Simulated** |
 | USSD and SMS | **Simulated**, on-screen, no mobile network |
 | Spoken balance | Browser speech synthesis |
-| SweepGuard and SmartRate | **Placeholders** today (see below) |
+| SweepGuard and SmartRate | **Built by us** (`server/src/intel`), statistics and rules, calibrated on synthetic traders |
 
 ## How we built it
 
@@ -305,7 +305,7 @@ Never commit `GATEWAY_KEY`, the webhook secret, a kubeconfig or `.env`.
 As of 11 November 2026:
 
 - **The web app's live mode needs the "web contract" API change**, which adds the sign-in code, summary, feed, activity, demo sign-in and ops overview endpoints in the shapes the web app reads. It was written and tested against the real backend, but was **not yet merged** when this README was written. Until it is, only the mock mode and onboarding run end to end.
-- **SweepGuard and SmartRate** are placeholders: a simple threshold guard and a stored suggestion. The statistical versions are still to be built.
+- **SweepGuard and SmartRate** are statistics and rules, not models, and were calibrated on synthetic traders because no real merchant data exists yet. Every threshold is a named constant so it can be re-tuned on Access data. SweepGuard compares each credit with the trader's own last 30 sweep days (with absolute limits when history is thin) and holds out only the flagged credit. SmartRate runs after the nightly sweep and files a one-step suggestion that the trader must confirm. Look-alike duplicate detection (same sender, amount and narration within 5 minutes) is in the engine but needs the sender and narration from the bank feed, which the app does not store yet.
 - **The web app is not part of the deployed image.**
 - **`kobo-core/`** (the earlier design) should be removed, and parts of `docs/TEAM.md` describe an older API shape.
 - **Not yet verified:** the Docker build and cluster deploy of the combined app, and the smoke test against the live sandbox.

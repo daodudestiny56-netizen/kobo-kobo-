@@ -19,7 +19,7 @@ The ops and demo controls are open while `DEMO_OPEN=1` is set in `k8s/app.yaml`.
 
 ## What is simulated
 
-The bank is the Forge sandbox. Customer payments are transfers between team accounts. The pension account and RSA PIN, USSD and SMS are simulated. SweepGuard is a threshold placeholder and SmartRate a stored suggestion today.
+The bank is the Forge sandbox. Customer payments are transfers between team accounts. The pension account and RSA PIN, USSD and SMS are simulated. SweepGuard and SmartRate are real statistics and rules (`server/src/intel`), calibrated on synthetic traders. Try a credit of 3,000,000 naira to see SweepGuard hold it while the rest of the day still sweeps.
 
 ## If something breaks
 

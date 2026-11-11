@@ -13,7 +13,7 @@ The deployed app is one process: root `src/server.ts` mounts the engine routes a
 | `DEMO_SECRET` | Secret sent in `X-Demo-Key` for protected root demo actions when `DEMO_MODE=true`. |
 | `IDENTITY_HMAC_KEY` | Stable secret used to hash identity data; configure it before onboarding merchants. |
 | `DEMO_BANK_ACCOUNTS` | Optional, comma-separated: bank accounts for the seven demo traders (the sandbox individuals). |
-| `GUARD_HOLD_ABOVE_NAIRA` | Placeholder guard: hold any single credit at or above this amount. Demo uses `1000000`. |
+| `GUARD_HOLD_ABOVE_NAIRA` | Optional fixed ceiling alongside the statistical guard: also hold any single credit at or above this amount. |
 | `SCHEDULER_ENABLED`, `SWEEP_CRON`, `SWEEP_RETRY_CRON`, `REQUERY_CRON` | Defaults: 23:00 and 23:30 WAT, requery every minute. |
 
 Never commit `GATEWAY_KEY`, the webhook secret, kubeconfig or `.env`.
