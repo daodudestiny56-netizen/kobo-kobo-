@@ -1,0 +1,104 @@
+[
+  {
+    "name_a": "ADEWALE BABATUNDE OGUNLEYE",
+    "name_b": "Babatunde Ogunleye",
+    "expected": "MATCH",
+    "note": "missing first name"
+  },
+  {
+    "name_a": "Chukwuemeka Obi",
+    "name_b": "Obi Chukwuemeka",
+    "expected": "MATCH",
+    "note": "word order swapped"
+  },
+  {
+    "name_a": "Folasade Bisi Adeyemi",
+    "name_b": "Adeyemi Folasade",
+    "expected": "MATCH",
+    "note": "order swap + missing middle name"
+  },
+  {
+    "name_a": "Mr. Adewale Ogunleye",
+    "name_b": "ADEWALE OGUNLEYE",
+    "expected": "MATCH",
+    "note": "title + casing"
+  },
+  {
+    "name_a": "Ibrahim Musa Danladi",
+    "name_b": "Musa I. Danladi",
+    "expected": "MATCH",
+    "note": "initial"
+  },
+  {
+    "name_a": "Ngozi Okafor",
+    "name_b": "Ngozi Okafo",
+    "expected": "MATCH",
+    "note": "typo"
+  },
+  {
+    "name_a": "Hauwa Abdullahi",
+    "name_b": "Hawa Abdullahi",
+    "expected": "MATCH",
+    "note": "spelling variant"
+  },
+  {
+    "name_a": "Ahmed Yusuf",
+    "name_b": "Ahmad Yusuf",
+    "expected": "MATCH",
+    "note": "spelling variant"
+  },
+  {
+    "name_a": "Fatima Bello",
+    "name_b": "Fatima Bello",
+    "expected": "MATCH",
+    "note": "identical"
+  },
+  {
+    "name_a": "Chidi Emeka Nwosu",
+    "name_b": "Emeka Chidi Nwosu",
+    "expected": "MATCH",
+    "note": "first/middle swapped"
+  },
+  {
+    "name_a": "Seyi Adebayo",
+    "name_b": "Seun Adebayo",
+    "expected": "REVIEW",
+    "note": "different first name, same surname"
+  },
+  {
+    "name_a": "ADEBAYO OLUWASEUN JOHN",
+    "name_b": "Seun Adebayo",
+    "expected": "REVIEW",
+    "note": "shortened form (Seun / Oluwaseun)"
+  },
+  {
+    "name_a": "Oluwatimilehin Abiodun",
+    "name_b": "Timilehin Abiodun",
+    "expected": "REVIEW",
+    "note": "shortened form"
+  },
+  {
+    "name_a": "Aminu Kano",
+    "name_b": "Kano",
+    "expected": "REVIEW",
+    "note": "single name only: never auto-match"
+  },
+  {
+    "name_a": "Tomiwa Owoeye",
+    "name_b": "Tomiwa Adeyemi",
+    "expected": "REVIEW",
+    "note": "surname differs (e.g. after marriage): human check"
+  },
+  {
+    "name_a": "John Smith",
+    "name_b": "Jane Doe",
+    "expected": "MISMATCH",
+    "note": "different person"
+  },
+  {
+    "name_a": "Chinedu Okeke",
+    "name_b": "Emeka Nwosu",
+    "expected": "MISMATCH",
+    "note": "different person"
+  }
+]

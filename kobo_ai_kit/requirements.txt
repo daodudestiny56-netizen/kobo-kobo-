@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+rapidfuzz
+numpy
+httpx
+imageio-ffmpeg

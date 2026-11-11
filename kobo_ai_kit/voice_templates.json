@@ -1,0 +1,760 @@
+{
+ "_readme": "Voice scripts for Kobo Kobo. Edit TEXT only; never remove or rename a {slot}. A segment is either a string (core: never dropped), [text, weight] (optional: dropped lowest weight first when the audio would be too long) or [text, weight, 'slot'] (only used when that slot has a value). status: 'approved' = a native speaker reviewed it; 'draft' = written by an AI, usable for demos only. Amounts are spoken in English words in every language (Nigerians commonly say money in English). Keywords YES/NO must stay in English: the SMS handler matches them. The keywords RESUME and YES stay in English: the SMS handler matches them.",
+ "version": 1,
+ "languages": {
+  "en": {
+   "name": "English",
+   "tts_lang": "pcm",
+   "status": "approved",
+   "note": "Read by a Nigerian Pidgin voice: 9jaLingo has no plain-English voice. Check the accent."
+  },
+  "pidgin": {
+   "name": "Nigerian Pidgin",
+   "tts_lang": "pcm",
+   "status": "approved",
+   "note": "AI draft. Needs a Pidgin speaker to review."
+  },
+  "yoruba": {
+   "name": "Yoruba",
+   "tts_lang": "yo",
+   "status": "approved",
+   "note": "AI draft. Needs a Yoruba speaker to review spelling, tone marks and word choice."
+  },
+  "hausa": {
+   "name": "Hausa",
+   "tts_lang": "ha",
+   "status": "approved",
+   "note": "AI draft. Needs a Hausa speaker to review."
+  },
+  "igbo": {
+   "name": "Igbo",
+   "tts_lang": "ig",
+   "status": "approved",
+   "note": "AI draft. Needs an Igbo speaker to review (dots under i, o, u matter)."
+  }
+ },
+ "intents": {
+  "ivr_welcome": {
+   "default": {
+    "en": [
+     "Hello, this is Kobo Kobo, your pension helper.",
+     "Press one to hear your balance.",
+     "Press two to hear what we saved today.",
+     [
+      "Press nine to hear this again.",
+      60
+     ]
+    ],
+    "pidgin": [
+     "Hello, na Kobo Kobo, your pension helper.",
+     "Press one make you hear your balance.",
+     "Press two make you hear wetin we save today.",
+     [
+      "Press nine make you hear this one again.",
+      60
+     ]
+    ],
+    "yoruba": [
+     "Báwo ni, èyí ni Kobo Kobo, olùrànlọ́wọ́ owó ìfẹ̀yìntì yín.",
+     "Ẹ tẹ ọ̀kan láti gbọ́ iye owó yín.",
+     "Ẹ tẹ èjì láti gbọ́ ohun tí a fi pamọ́ lónìí.",
+     [
+      "Ẹ tẹ ẹ̀sán láti gbọ́ èyí lẹ́ẹ̀kan sí i.",
+      60
+     ]
+    ],
+    "hausa": [
+     "Sannu, wannan Kobo Kobo ne, mataimakin fansho naku.",
+     "Ku danna daya don jin ma'aunin kuɗinku.",
+     "Ku danna biyu don jin abin da muka ajiye yau.",
+     [
+      "Ku danna tara don sake jin wannan.",
+      60
+     ]
+    ],
+    "igbo": [
+     "Ndewo, nke a bụ Kobo Kobo, onye inyeaka ụgwọ ezumike nka gị.",
+     "Pịa otu ka ị nụrụ ego ị nwere.",
+     "Pịa abụọ ka ị nụrụ ihe anyị chekwara taa.",
+     [
+      "Pịa itoolu ka ị nụrụ nke a ọzọ.",
+      60
+     ]
+    ]
+   }
+  },
+  "ivr_invalid": {
+   "default": {
+    "en": [
+     "Sorry, we did not get that."
+    ],
+    "pidgin": [
+     "Sorry, we no understand wetin you press."
+    ],
+    "yoruba": [
+     "Ẹ jọ̀wọ́, a kò gbọ́ ohun tí ẹ tẹ."
+    ],
+    "hausa": [
+     "Yi hakuri, ba mu fahimci abin da kuka danna ba."
+    ],
+    "igbo": [
+     "Biko gbaghara, anyị aghọtaghị ihe ị pịrị."
+    ]
+   }
+  },
+  "ivr_goodbye": {
+   "default": {
+    "en": [
+     "Thank you for saving with Kobo Kobo. Goodbye."
+    ],
+    "pidgin": [
+     "Thank you say you dey save with Kobo Kobo. Bye bye."
+    ],
+    "yoruba": [
+     "Ẹ ṣeun tí ẹ ń fi owó pamọ́ pẹ̀lú Kobo Kobo. Ó dìgbà."
+    ],
+    "hausa": [
+     "Mun gode da ajiya tare da Kobo Kobo. Sai an jima."
+    ],
+    "igbo": [
+     "Daalụ maka ichekwa ego gị na Kobo Kobo. Ka ọ dị."
+    ]
+   }
+  },
+  "ivr_unknown": {
+   "default": {
+    "en": [
+     "Sorry, we could not find your account. Please dial the Kobo Kobo code to register. Goodbye."
+    ],
+    "pidgin": [
+     "Sorry, we no see your account. Abeg dial the Kobo Kobo code make you register. Bye bye."
+    ],
+    "yoruba": [
+     "Ẹ jọ̀wọ́, a kò rí àkántì yín. Ẹ pe kóòdù Kobo Kobo láti forúkọ sílẹ̀. Ó dìgbà."
+    ],
+    "hausa": [
+     "Yi hakuri, ba mu sami asusunku ba. Don Allah ku danna lambar Kobo Kobo don yin rajista. Sai an jima."
+    ],
+    "igbo": [
+     "Biko gbaghara, anyị ahụghị akaụntụ gị. Biko pịa koodu Kobo Kobo ka ịdebanye aha. Ka ọ dị."
+    ]
+   }
+  },
+  "ivr_not_ready": {
+   "default": {
+    "en": [
+     "Your latest figures are not ready yet. Please try again later. Goodbye."
+    ],
+    "pidgin": [
+     "Your latest figures never ready yet. Abeg try again later. Bye bye."
+    ],
+    "yoruba": [
+     "Àwọn ìṣirò yín tuntun kò tíì parí. Ẹ jọ̀wọ́ ẹ tún gbìyànjú lẹ́yìn náà. Ó dìgbà."
+    ],
+    "hausa": [
+     "Sabbin alkaluman ku ba su kammala ba tukuna. Don Allah ku sake gwadawa daga baya. Sai an jima."
+    ],
+    "igbo": [
+     "Ọnụ ọgụgụ gị kacha ọhụrụ adịbeghị njikere. Biko nwaa ọzọ mgbe e mesịrị. Ka ọ dị."
+    ]
+   }
+  },
+  "ivr_outbound_only": {
+   "default": {
+    "en": [
+     "For your safety, Kobo Kobo reads your balance only when we call you. Please dial the Kobo Kobo code and ask for a call. Goodbye."
+    ],
+    "pidgin": [
+     "For your safety, Kobo Kobo dey read your balance only when we call you. Abeg dial the Kobo Kobo code make you ask for call. Bye bye."
+    ],
+    "yoruba": [
+     "Fún ààbò yín, Kobo Kobo ń ka iye owó yín nígbà tí a bá pè yín nìkan. Ẹ pe kóòdù Kobo Kobo kí ẹ bèèrè fún ìpè. Ó dìgbà."
+    ],
+    "hausa": [
+     "Don tsaron ku, Kobo Kobo yana karanta ma'aunin kuɗinku ne kawai idan mun kira ku. Don Allah ku danna lambar Kobo Kobo ku nemi kira. Sai an jima."
+    ],
+    "igbo": [
+     "Maka nchekwa gị, Kobo Kobo na-agụ ego ị nwere naanị mgbe anyị kpọrọ gị. Biko pịa koodu Kobo Kobo ma rịọ ka anyị kpọọ gị. Ka ọ dị."
+    ]
+   }
+  },
+  "balance": {
+   "eligible": {
+    "en": [
+     "{name_prefix}Your total pension savings is {total}.",
+     "Your emergency pot has {emergency}.",
+     "Your retirement pot has {retirement}.",
+     "You can withdraw from your emergency pot now.",
+     [
+      "Your retirement pot stays locked until you are fifty.",
+      40
+     ],
+     [
+      "Well done.",
+      20
+     ]
+    ],
+    "pidgin": [
+     "{name_prefix}Your total pension money na {total}.",
+     "For emergency pot, {emergency} dey.",
+     "For retirement pot, {retirement} dey.",
+     "You fit withdraw from your emergency pot now.",
+     [
+      "Your retirement pot go stay locked till you reach fifty years.",
+      40
+     ],
+     [
+      "Well done!",
+      20
+     ]
+    ],
+    "yoruba": [
+     "{name_prefix}Àpapọ̀ owó ìfẹ̀yìntì yín jẹ́ {total}.",
+     "Owó pàjáwìrì yín jẹ́ {emergency}.",
+     "Owó ìfẹ̀yìntì yín jẹ́ {retirement}.",
+     "Ẹ lè yọ owó pàjáwìrì yín báyìí.",
+     [
+      "Owó ìfẹ̀yìntì yóò wà ní títì títí ẹ ó fi pé àádọ́ta ọdún.",
+      40
+     ],
+     [
+      "Ẹ ṣeun.",
+      20
+     ]
+    ],
+    "hausa": [
+     "{name_prefix}Jimillar kuɗin fansho naku shi ne {total}.",
+     "Asusun gaggawa yana da {emergency}.",
+     "Asusun ritaya yana da {retirement}.",
+     "Kuna iya cire kuɗin gaggawa yanzu.",
+     [
+      "Za a rufe asusun ritaya har sai kun kai shekara hamsin.",
+      40
+     ],
+     [
+      "Mun gode.",
+      20
+     ]
+    ],
+    "igbo": [
+     "{name_prefix}Ngụkọta ego ezumike nka gị bụ {total}.",
+     "Ego mberede gị bụ {emergency}.",
+     "Ego ezumike nka gị bụ {retirement}.",
+     "Ị nwere ike iwepụ ego mberede gị ugbu a.",
+     [
+      "A ga-akpọchi ego ezumike nka gị ruo mgbe ị ga-erue afọ iri ise.",
+      40
+     ],
+     [
+      "Daalụ.",
+      20
+     ]
+    ]
+   },
+   "waiting": {
+    "en": [
+     "{name_prefix}Your total pension savings is {total}.",
+     "Your emergency pot has {emergency}.",
+     "Your retirement pot has {retirement}.",
+     "You can withdraw from your emergency pot in {vesting_days}.",
+     [
+      "Your retirement pot stays locked until you are fifty.",
+      40
+     ],
+     [
+      "Well done.",
+      20
+     ]
+    ],
+    "pidgin": [
+     "{name_prefix}Your total pension money na {total}.",
+     "For emergency pot, {emergency} dey.",
+     "For retirement pot, {retirement} dey.",
+     "You go fit withdraw from your emergency pot after {vesting_days}.",
+     [
+      "Your retirement pot go stay locked till you reach fifty years.",
+      40
+     ],
+     [
+      "Well done!",
+      20
+     ]
+    ],
+    "yoruba": [
+     "{name_prefix}Àpapọ̀ owó ìfẹ̀yìntì yín jẹ́ {total}.",
+     "Owó pàjáwìrì yín jẹ́ {emergency}.",
+     "Owó ìfẹ̀yìntì yín jẹ́ {retirement}.",
+     "Ẹ ó lè yọ owó pàjáwìrì yín lẹ́yìn {vesting_days}.",
+     [
+      "Owó ìfẹ̀yìntì yóò wà ní títì títí ẹ ó fi pé àádọ́ta ọdún.",
+      40
+     ],
+     [
+      "Ẹ ṣeun.",
+      20
+     ]
+    ],
+    "hausa": [
+     "{name_prefix}Jimillar kuɗin fansho naku shi ne {total}.",
+     "Asusun gaggawa yana da {emergency}.",
+     "Asusun ritaya yana da {retirement}.",
+     "Za ku iya cire kuɗin gaggawa bayan {vesting_days}.",
+     [
+      "Za a rufe asusun ritaya har sai kun kai shekara hamsin.",
+      40
+     ],
+     [
+      "Mun gode.",
+      20
+     ]
+    ],
+    "igbo": [
+     "{name_prefix}Ngụkọta ego ezumike nka gị bụ {total}.",
+     "Ego mberede gị bụ {emergency}.",
+     "Ego ezumike nka gị bụ {retirement}.",
+     "Ị ga-enwe ike iwepụ ego mberede gị mgbe {vesting_days} gachara.",
+     [
+      "A ga-akpọchi ego ezumike nka gị ruo mgbe ị ga-erue afọ iri ise.",
+      40
+     ],
+     [
+      "Daalụ.",
+      20
+     ]
+    ]
+   },
+   "cooling": {
+    "en": [
+     "{name_prefix}Your total pension savings is {total}.",
+     "Your emergency pot has {emergency}.",
+     "Your retirement pot has {retirement}.",
+     "You can make your next emergency withdrawal in {cooldown_days}.",
+     [
+      "Your retirement pot stays locked until you are fifty.",
+      40
+     ],
+     [
+      "Well done.",
+      20
+     ]
+    ],
+    "pidgin": [
+     "{name_prefix}Your total pension money na {total}.",
+     "For emergency pot, {emergency} dey.",
+     "For retirement pot, {retirement} dey.",
+     "You fit make another emergency withdrawal after {cooldown_days}.",
+     [
+      "Your retirement pot go stay locked till you reach fifty years.",
+      40
+     ],
+     [
+      "Well done!",
+      20
+     ]
+    ],
+    "yoruba": [
+     "{name_prefix}Àpapọ̀ owó ìfẹ̀yìntì yín jẹ́ {total}.",
+     "Owó pàjáwìrì yín jẹ́ {emergency}.",
+     "Owó ìfẹ̀yìntì yín jẹ́ {retirement}.",
+     "Ẹ lè tún yọ owó pàjáwìrì lẹ́yìn {cooldown_days}.",
+     [
+      "Owó ìfẹ̀yìntì yóò wà ní títì títí ẹ ó fi pé àádọ́ta ọdún.",
+      40
+     ],
+     [
+      "Ẹ ṣeun.",
+      20
+     ]
+    ],
+    "hausa": [
+     "{name_prefix}Jimillar kuɗin fansho naku shi ne {total}.",
+     "Asusun gaggawa yana da {emergency}.",
+     "Asusun ritaya yana da {retirement}.",
+     "Za ku iya sake cire kuɗin gaggawa bayan {cooldown_days}.",
+     [
+      "Za a rufe asusun ritaya har sai kun kai shekara hamsin.",
+      40
+     ],
+     [
+      "Mun gode.",
+      20
+     ]
+    ],
+    "igbo": [
+     "{name_prefix}Ngụkọta ego ezumike nka gị bụ {total}.",
+     "Ego mberede gị bụ {emergency}.",
+     "Ego ezumike nka gị bụ {retirement}.",
+     "Ị nwere ike iwepụ ego mberede ọzọ mgbe {cooldown_days} gachara.",
+     [
+      "A ga-akpọchi ego ezumike nka gị ruo mgbe ị ga-erue afọ iri ise.",
+      40
+     ],
+     [
+      "Daalụ.",
+      20
+     ]
+    ]
+   },
+   "empty": {
+    "en": [
+     "{name_prefix}You have not saved anything yet.",
+     "Your first savings will come from your next sales."
+    ],
+    "pidgin": [
+     "{name_prefix}You never save anything yet.",
+     "Your first savings go come from your next sales."
+    ],
+    "yoruba": [
+     "{name_prefix}Ẹ kò tíì fi nǹkan kan pamọ́.",
+     "Ìfipamọ́ àkọ́kọ́ yín yóò wá láti ara ọjà yín tó kàn."
+    ],
+    "hausa": [
+     "{name_prefix}Ba ku riga kun ajiye komai ba.",
+     "Ajiyarku ta farko za ta fito daga sayarwarku ta gaba."
+    ],
+    "igbo": [
+     "{name_prefix}Ịchekwabeghị ihe ọ bụla.",
+     "Nchekwa mbụ gị ga-esite n'ahịa gị na-esote."
+    ]
+   }
+  },
+  "sweep_receipt": {
+   "normal": {
+    "en": [
+     "{name_prefix}Today you sold {takings}.",
+     "We saved {sweep} for your pension.",
+     [
+      "{emergency} went to your emergency pot and {retirement} to your retirement pot.",
+      70
+     ],
+     [
+      "We also found one big payment of {held_amount} and did not save from it yet. Please check your text messages.",
+      100,
+      "held_amount"
+     ],
+     [
+      "Well done.",
+      20
+     ]
+    ],
+    "pidgin": [
+     "{name_prefix}Today you sell {takings}.",
+     "We save {sweep} for your pension.",
+     [
+      "{emergency} enter emergency pot, {retirement} enter retirement pot.",
+      70
+     ],
+     [
+      "We also see one big payment, {held_amount}. We never save from am yet. Check your text message.",
+      100,
+      "held_amount"
+     ],
+     [
+      "Well done!",
+      20
+     ]
+    ],
+    "yoruba": [
+     "{name_prefix}Ọjà tí ẹ tà lónìí jẹ́ {takings}.",
+     "A fi {sweep} pamọ́ fún owó ìfẹ̀yìntì yín.",
+     [
+      "{emergency} lọ sínú owó pàjáwìrì, {retirement} sì lọ sínú owó ìfẹ̀yìntì.",
+      70
+     ],
+     [
+      "A tún rí owó ńlá kan, {held_amount}. A kò tíì fi pamọ́ nínú rẹ̀. Ẹ jọ̀wọ́ ẹ wo ìfiránṣẹ́ orí fóònù yín.",
+      100,
+      "held_amount"
+     ],
+     [
+      "Ẹ ṣeun.",
+      20
+     ]
+    ],
+    "hausa": [
+     "{name_prefix}Yau kun sayar da kaya na {takings}.",
+     "Mun ajiye {sweep} don fansho naku.",
+     [
+      "{emergency} ya shiga asusun gaggawa, {retirement} kuma ya shiga na ritaya.",
+      70
+     ],
+     [
+      "Mun kuma ga babban kuɗi guda, {held_amount}. Ba mu ajiye daga ciki ba tukuna. Don Allah ku duba saƙon wayarku.",
+      100,
+      "held_amount"
+     ],
+     [
+      "Mun gode.",
+      20
+     ]
+    ],
+    "igbo": [
+     "{name_prefix}Taa, ire ahịa gị bụ {takings}.",
+     "Anyị chekwara {sweep} maka ụgwọ ezumike nka gị.",
+     [
+      "{emergency} banyere n'ego mberede, {retirement} banyekwara n'ego ezumike nka.",
+      70
+     ],
+     [
+      "Anyị hụkwara nnukwu ego otu, {held_amount}. Anyị achekwabeghị ya. Biko lelee ozi ekwentị gị.",
+      100,
+      "held_amount"
+     ],
+     [
+      "Daalụ.",
+      20
+     ]
+    ]
+   },
+   "zero_sales": {
+    "en": [
+     "{name_prefix}No sales today, so we saved nothing.",
+     "No problem. See you tomorrow.",
+     [
+      "We also found one big payment of {held_amount} and did not save from it yet. Please check your text messages.",
+      100,
+      "held_amount"
+     ]
+    ],
+    "pidgin": [
+     "{name_prefix}No sales today, so we no save anything.",
+     "No wahala. We go see tomorrow.",
+     [
+      "We also see one big payment, {held_amount}. We never save from am yet. Check your text message.",
+      100,
+      "held_amount"
+     ]
+    ],
+    "yoruba": [
+     "{name_prefix}Kò sí títà lónìí, nítorí náà a kò fi nǹkan pamọ́.",
+     "Kò sí wàhálà. Ẹ ó rí wa lọ́la.",
+     [
+      "A tún rí owó ńlá kan, {held_amount}. A kò tíì fi pamọ́ nínú rẹ̀. Ẹ jọ̀wọ́ ẹ wo ìfiránṣẹ́ orí fóònù yín.",
+      100,
+      "held_amount"
+     ]
+    ],
+    "hausa": [
+     "{name_prefix}Babu sayarwa yau, don haka ba mu ajiye komai ba.",
+     "Babu damuwa. Sai gobe.",
+     [
+      "Mun kuma ga babban kuɗi guda, {held_amount}. Ba mu ajiye daga ciki ba tukuna. Don Allah ku duba saƙon wayarku.",
+      100,
+      "held_amount"
+     ]
+    ],
+    "igbo": [
+     "{name_prefix}Enweghị ahịa taa, ya mere anyị echekwaghị ihe ọ bụla.",
+     "Enweghị nsogbu. Ka ọ dị echi.",
+     [
+      "Anyị hụkwara nnukwu ego otu, {held_amount}. Anyị achekwabeghị ya. Biko lelee ozi ekwentị gị.",
+      100,
+      "held_amount"
+     ]
+    ]
+   },
+   "no_sweep": {
+    "en": [
+     "{name_prefix}Today you sold {takings}, but we did not save anything tonight.",
+     "Saving continues with your next sales."
+    ],
+    "pidgin": [
+     "{name_prefix}Today you sell {takings}, but we no save anything tonight.",
+     "Saving go continue with your next sales."
+    ],
+    "yoruba": [
+     "{name_prefix}Ọjà tí ẹ tà lónìí jẹ́ {takings}, ṣùgbọ́n a kò fi nǹkan pamọ́ lálẹ́ yìí.",
+     "Ìfipamọ́ yóò tẹ̀síwájú pẹ̀lú ọjà yín tó kàn."
+    ],
+    "hausa": [
+     "{name_prefix}Yau kun sayar da kaya na {takings}, amma ba mu ajiye komai ba a daren nan.",
+     "Ajiya za ta ci gaba da sayarwarku ta gaba."
+    ],
+    "igbo": [
+     "{name_prefix}Taa, ire ahịa gị bụ {takings}, ma anyị echekwaghị ihe ọ bụla n'abalị a.",
+     "Nchekwa ga-aga n'ihu site n'ahịa gị na-esote."
+    ]
+   },
+   "low_balance": {
+    "en": [
+     "{name_prefix}Today you sold {takings}, but we saved nothing so that your account keeps a small balance for you.",
+     "Saving continues with your next sales."
+    ],
+    "pidgin": [
+     "{name_prefix}Today you sell {takings}, but we no save anything so that small money go remain for your account.",
+     "Saving go continue with your next sales."
+    ],
+    "yoruba": [
+     "{name_prefix}Ọjà tí ẹ tà lónìí jẹ́ {takings}, ṣùgbọ́n a kò fi nǹkan pamọ́ kí owó díẹ̀ lè ṣẹ́kù nínú àkántì yín.",
+     "Ìfipamọ́ yóò tẹ̀síwájú pẹ̀lú ọjà yín tó kàn."
+    ],
+    "hausa": [
+     "{name_prefix}Yau kun sayar da kaya na {takings}, amma ba mu ajiye komai ba don asusunku ya ci gaba da samun ɗan kuɗi.",
+     "Ajiya za ta ci gaba da sayarwarku ta gaba."
+    ],
+    "igbo": [
+     "{name_prefix}Taa, ire ahịa gị bụ {takings}, ma anyị echekwaghị ihe ọ bụla ka obere ego fọdụrụ n'akaụntụ gị.",
+     "Nchekwa ga-aga n'ihu site n'ahịa gị na-esote."
+    ]
+   },
+   "paused": {
+    "en": [
+     "{name_prefix}Your saving is paused, so nothing was saved today.",
+     "To start again, send RESUME by text message."
+    ],
+    "pidgin": [
+     "{name_prefix}Your saving don pause, so we no save anything today.",
+     "To start again, send RESUME for text message."
+    ],
+    "yoruba": [
+     "{name_prefix}A ti dá ìfipamọ́ yín dúró, nítorí náà a kò fi nǹkan pamọ́ lónìí.",
+     "Láti tún bẹ̀rẹ̀, ẹ fi RESUME ránṣẹ́ nípasẹ̀ ìfiránṣẹ́ orí fóònù."
+    ],
+    "hausa": [
+     "{name_prefix}An dakatar da ajiyarku, don haka ba mu ajiye komai ba yau.",
+     "Don sake farawa, ku aika RESUME ta saƙon waya."
+    ],
+    "igbo": [
+     "{name_prefix}A kwụsịrị nchekwa gị, ya mere anyị echekwaghị ihe ọ bụla taa.",
+     "Ka ịmalite ọzọ, zipu RESUME site n'ozi ekwentị."
+    ]
+   }
+  },
+  "rate_suggestion": {
+   "increase": {
+    "en": [
+     [
+      "{name_prefix}Your sales have been steady.",
+      80
+     ],
+     "We suggest moving your pension saving from {rate_cur} to {rate_new}.",
+     [
+      "This adds about {monthly_change} every month.",
+      90
+     ],
+     "To agree, reply YES to the text message we sent.",
+     "If you do nothing, your rate stays the same."
+    ],
+    "pidgin": [
+     [
+      "{name_prefix}Your sales dey steady.",
+      80
+     ],
+     "We wan move your pension saving from {rate_cur} to {rate_new}.",
+     [
+      "E go add about {monthly_change} every month.",
+      90
+     ],
+     "If you agree, reply YES for the text message wey we send.",
+     "If you no do anything, your rate go stay as e be."
+    ],
+    "yoruba": [
+     [
+      "{name_prefix}Títà yín ti dúró ṣinṣin.",
+      80
+     ],
+     "A dábàá pé kí a gbé ìfipamọ́ owó ìfẹ̀yìntì yín láti {rate_cur} sí {rate_new}.",
+     [
+      "Èyí yóò fi bí {monthly_change} kún un lóṣooṣù.",
+      90
+     ],
+     "Tí ẹ bá fọwọ́ sí i, ẹ fèsì YES sí ìfiránṣẹ́ tí a rán sí yín.",
+     "Tí ẹ kò bá ṣe nǹkan kan, ìpín yín yóò wà bí ó ṣe wà."
+    ],
+    "hausa": [
+     [
+      "{name_prefix}Sayarwarku ta tsaya daram.",
+      80
+     ],
+     "Muna ba da shawarar mu ƙara ajiyar fansho naku daga {rate_cur} zuwa {rate_new}.",
+     [
+      "Wannan zai ƙara kusan {monthly_change} kowane wata.",
+      90
+     ],
+     "Idan kun yarda, ku amsa YES ga saƙon da muka aika.",
+     "Idan ba ku yi komai ba, adadin ajiyarku zai tsaya yadda yake."
+    ],
+    "igbo": [
+     [
+      "{name_prefix}Ahịa gị na-aga nke ọma.",
+      80
+     ],
+     "Anyị na-atụ aro ka anyị bulie nchekwa ụgwọ ezumike nka gị site na {rate_cur} ruo {rate_new}.",
+     [
+      "Nke a ga-agbakwunye ihe dị ka {monthly_change} kwa ọnwa.",
+      90
+     ],
+     "Ọ bụrụ na ị kwenyere, zaa YES n'ozi anyị zitere.",
+     "Ọ bụrụ na ị emeghị ihe ọ bụla, oke gị ga-anọgide ka ọ dị."
+    ]
+   },
+   "decrease": {
+    "en": [
+     [
+      "{name_prefix}Your sales have been uneven lately.",
+      80
+     ],
+     "To protect your business money, we suggest lowering your pension saving from {rate_cur} to {rate_new}.",
+     [
+      "This lowers your saving by about {monthly_change} every month.",
+      90
+     ],
+     "To agree, reply YES to the text message we sent.",
+     "If you do nothing, your rate stays the same."
+    ],
+    "pidgin": [
+     [
+      "{name_prefix}Your sales don dey up and down.",
+      80
+     ],
+     "To protect your business money, we wan reduce your pension saving from {rate_cur} to {rate_new}.",
+     [
+      "E go reduce your saving by about {monthly_change} every month.",
+      90
+     ],
+     "If you agree, reply YES for the text message wey we send.",
+     "If you no do anything, your rate go stay as e be."
+    ],
+    "yoruba": [
+     [
+      "{name_prefix}Títà yín ti ń lọ sókè sódò láìpẹ́ yìí.",
+      80
+     ],
+     "Láti dáàbò bo owó iṣẹ́ yín, a dábàá pé kí a dín ìfipamọ́ owó ìfẹ̀yìntì yín kù láti {rate_cur} sí {rate_new}.",
+     [
+      "Èyí yóò dín ìfipamọ́ yín kù ní bí {monthly_change} lóṣooṣù.",
+      90
+     ],
+     "Tí ẹ bá fọwọ́ sí i, ẹ fèsì YES sí ìfiránṣẹ́ tí a rán sí yín.",
+     "Tí ẹ kò bá ṣe nǹkan kan, ìpín yín yóò wà bí ó ṣe wà."
+    ],
+    "hausa": [
+     [
+      "{name_prefix}Sayarwarku ta yi sama da ƙasa kwanan nan.",
+      80
+     ],
+     "Don kare kuɗin kasuwancinku, muna ba da shawarar mu rage ajiyar fansho naku daga {rate_cur} zuwa {rate_new}.",
+     [
+      "Wannan zai rage ajiyarku da kusan {monthly_change} kowane wata.",
+      90
+     ],
+     "Idan kun yarda, ku amsa YES ga saƙon da muka aika.",
+     "Idan ba ku yi komai ba, adadin ajiyarku zai tsaya yadda yake."
+    ],
+    "igbo": [
+     [
+      "{name_prefix}Ahịa gị adịghị ka ọ na-adị n'oge na-adịbeghị anya.",
+      80
+     ],
+     "Iji chebe ego azụmahịa gị, anyị na-atụ aro ka anyị belata nchekwa ụgwọ ezumike nka gị site na {rate_cur} ruo {rate_new}.",
+     [
+      "Nke a ga-ebelata nchekwa gị site na ihe dị ka {monthly_change} kwa ọnwa.",
+      90
+     ],
+     "Ọ bụrụ na ị kwenyere, zaa YES n'ozi anyị zitere.",
+     "Ọ bụrụ na ị emeghị ihe ọ bụla, oke gị ga-anọgide ka ọ dị."
+    ]
+   }
+  }
+ }
+}

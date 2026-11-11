@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+voice_cache/
+voice_out/
+.git/
+.venv/
+venv/
+test_*.py
+smart_rate_sim.py
+README.md
+fallback/
+*.md

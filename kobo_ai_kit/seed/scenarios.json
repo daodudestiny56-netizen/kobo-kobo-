@@ -1,0 +1,376 @@
+[
+  {
+    "name": "normal_day",
+    "description": "Ordinary day for a steady trader. Everything sweepable.",
+    "request": {
+      "merchant_id": "m_0001",
+      "sweep_date": "2026-11-06",
+      "identity_status": "VERIFIED",
+      "prior_sweep_status": null,
+      "proposed_rate": 2.0,
+      "inflows": [
+        {
+          "bank_reference": "HYD-TX-S1-01",
+          "amount": 2500.0,
+          "channel": "POS",
+          "settled_at": "2026-11-06T08:12:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S1-02",
+          "amount": 4150.0,
+          "channel": "NIP_TRANSFER",
+          "settled_at": "2026-11-06T09:40:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S1-03",
+          "amount": 1800.0,
+          "channel": "QR",
+          "settled_at": "2026-11-06T10:05:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S1-04",
+          "amount": 6200.0,
+          "channel": "POS",
+          "settled_at": "2026-11-06T11:30:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S1-05",
+          "amount": 3000.0,
+          "channel": "POS",
+          "settled_at": "2026-11-06T12:45:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S1-06",
+          "amount": 5400.0,
+          "channel": "NIP_TRANSFER",
+          "settled_at": "2026-11-06T14:10:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S1-07",
+          "amount": 2250.0,
+          "channel": "QR",
+          "settled_at": "2026-11-06T15:55:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S1-08",
+          "amount": 4800.0,
+          "channel": "POS",
+          "settled_at": "2026-11-06T17:20:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "CLEARED",
+      "severity": "NONE",
+      "sweepable_total": 30100.0,
+      "alert_types": [],
+      "flagged_bank_references": []
+    }
+  },
+  {
+    "name": "spike_10m",
+    "description": "Accidental N10,000,000 transfer: only that inflow is held, the rest is swept.",
+    "request": {
+      "merchant_id": "m_0005",
+      "sweep_date": "2026-11-06",
+      "identity_status": "VERIFIED",
+      "prior_sweep_status": null,
+      "proposed_rate": 2.0,
+      "inflows": [
+        {
+          "bank_reference": "HYD-TX-S2-01",
+          "amount": 12500.0,
+          "channel": "POS",
+          "settled_at": "2026-11-06T08:30:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S2-02",
+          "amount": 8300.0,
+          "channel": "POS",
+          "settled_at": "2026-11-06T09:50:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S2-03",
+          "amount": 21000.0,
+          "channel": "NIP_TRANSFER",
+          "settled_at": "2026-11-06T11:15:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S2-04",
+          "amount": 9750.0,
+          "channel": "POS",
+          "settled_at": "2026-11-06T13:00:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S2-05",
+          "amount": 10000000.0,
+          "channel": "NIP_TRANSFER",
+          "settled_at": "2026-11-06T16:10:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S2-06",
+          "amount": 15400.0,
+          "channel": "QR",
+          "settled_at": "2026-11-06T17:45:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "PARTIAL",
+      "severity": "HIGH",
+      "sweepable_total": 66950.0,
+      "alert_types": [
+        "ANOMALOUS_INFLOW"
+      ],
+      "flagged_bank_references": [
+        "HYD-TX-S2-05"
+      ]
+    }
+  },
+  {
+    "name": "duplicate_sweep",
+    "description": "Cron re-ran after a sweep already EXECUTED today: hold, never sweep twice.",
+    "request": {
+      "merchant_id": "m_0001",
+      "sweep_date": "2026-11-06",
+      "identity_status": "VERIFIED",
+      "prior_sweep_status": "EXECUTED",
+      "proposed_rate": 2.0,
+      "inflows": [
+        {
+          "bank_reference": "HYD-TX-S1-01",
+          "amount": 2500.0,
+          "channel": "POS",
+          "settled_at": "2026-11-06T08:12:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S1-02",
+          "amount": 4150.0,
+          "channel": "NIP_TRANSFER",
+          "settled_at": "2026-11-06T09:40:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S1-03",
+          "amount": 1800.0,
+          "channel": "QR",
+          "settled_at": "2026-11-06T10:05:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S1-04",
+          "amount": 6200.0,
+          "channel": "POS",
+          "settled_at": "2026-11-06T11:30:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S1-05",
+          "amount": 3000.0,
+          "channel": "POS",
+          "settled_at": "2026-11-06T12:45:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S1-06",
+          "amount": 5400.0,
+          "channel": "NIP_TRANSFER",
+          "settled_at": "2026-11-06T14:10:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S1-07",
+          "amount": 2250.0,
+          "channel": "QR",
+          "settled_at": "2026-11-06T15:55:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S1-08",
+          "amount": 4800.0,
+          "channel": "POS",
+          "settled_at": "2026-11-06T17:20:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "HELD",
+      "severity": "MEDIUM",
+      "sweepable_total": 0.0,
+      "alert_types": [
+        "SUSPECTED_DUPLICATE"
+      ],
+      "flagged_bank_references": []
+    }
+  },
+  {
+    "name": "zero_sales_day",
+    "description": "No inflows. CLEARED with sweepable 0 -> executor logs SKIPPED_ZERO_SALES, no debit.",
+    "request": {
+      "merchant_id": "m_0004",
+      "sweep_date": "2026-11-06",
+      "identity_status": "VERIFIED",
+      "prior_sweep_status": null,
+      "proposed_rate": 2.0,
+      "inflows": []
+    },
+    "expected": {
+      "status": "CLEARED",
+      "severity": "NONE",
+      "sweepable_total": 0.0,
+      "alert_types": [],
+      "flagged_bank_references": []
+    }
+  },
+  {
+    "name": "new_trader_large_inflow",
+    "description": "9 days of history is enough (PRD v3: 7 days), so the normal statistics apply: N650,000 is ~200x this trader's sale.",
+    "request": {
+      "merchant_id": "m_0003",
+      "sweep_date": "2026-11-06",
+      "identity_status": "VERIFIED",
+      "prior_sweep_status": null,
+      "proposed_rate": 2.0,
+      "inflows": [
+        {
+          "bank_reference": "HYD-TX-S5-01",
+          "amount": 15000.0,
+          "channel": "POS",
+          "settled_at": "2026-11-06T10:00:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S5-02",
+          "amount": 7200.0,
+          "channel": "QR",
+          "settled_at": "2026-11-06T12:30:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S5-03",
+          "amount": 650000.0,
+          "channel": "NIP_TRANSFER",
+          "settled_at": "2026-11-06T15:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "PARTIAL",
+      "severity": "HIGH",
+      "sweepable_total": 22200.0,
+      "alert_types": [
+        "ANOMALOUS_INFLOW"
+      ],
+      "flagged_bank_references": [
+        "HYD-TX-S5-03"
+      ]
+    }
+  },
+  {
+    "name": "brand_new_merchant_large_inflow",
+    "description": "No history at all: absolute cold-start thresholds apply (N500k = MEDIUM).",
+    "request": {
+      "merchant_id": "m_9999",
+      "sweep_date": "2026-11-06",
+      "identity_status": "VERIFIED",
+      "prior_sweep_status": null,
+      "proposed_rate": 2.0,
+      "inflows": [
+        {
+          "bank_reference": "HYD-TX-S8-01",
+          "amount": 15000.0,
+          "channel": "POS",
+          "settled_at": "2026-11-06T10:00:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S8-02",
+          "amount": 7200.0,
+          "channel": "QR",
+          "settled_at": "2026-11-06T12:30:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S8-03",
+          "amount": 650000.0,
+          "channel": "NIP_TRANSFER",
+          "settled_at": "2026-11-06T15:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "PARTIAL",
+      "severity": "MEDIUM",
+      "sweepable_total": 22200.0,
+      "alert_types": [
+        "ANOMALOUS_INFLOW"
+      ],
+      "flagged_bank_references": [
+        "HYD-TX-S8-03"
+      ]
+    }
+  },
+  {
+    "name": "name_mismatch",
+    "description": "KYC name check failed: whole sweep held until Ops resolves it.",
+    "request": {
+      "merchant_id": "m_0002",
+      "sweep_date": "2026-11-06",
+      "identity_status": "MISMATCH",
+      "prior_sweep_status": null,
+      "proposed_rate": 2.0,
+      "inflows": [
+        {
+          "bank_reference": "HYD-TX-S6-01",
+          "amount": 8000.0,
+          "channel": "POS",
+          "settled_at": "2026-11-06T09:00:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S6-02",
+          "amount": 22000.0,
+          "channel": "POS",
+          "settled_at": "2026-11-06T12:00:00Z"
+        },
+        {
+          "bank_reference": "HYD-TX-S6-03",
+          "amount": 5500.0,
+          "channel": "QR",
+          "settled_at": "2026-11-06T16:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "HELD",
+      "severity": "HIGH",
+      "sweepable_total": 0.0,
+      "alert_types": [
+        "NAME_MISMATCH"
+      ],
+      "flagged_bank_references": []
+    }
+  },
+  {
+    "name": "confirmed_release",
+    "description": "Trader confirmed the big inflow is legit: Guard stops flagging it.",
+    "request": {
+      "merchant_id": "m_0005",
+      "sweep_date": "2026-11-06",
+      "identity_status": "VERIFIED",
+      "prior_sweep_status": null,
+      "proposed_rate": 2.0,
+      "inflows": [
+        {
+          "bank_reference": "HYD-TX-S7-01",
+          "amount": 10000000.0,
+          "channel": "NIP_TRANSFER",
+          "settled_at": "2026-11-06T16:10:00Z",
+          "trader_confirmed": true
+        },
+        {
+          "bank_reference": "HYD-TX-S7-02",
+          "amount": 9000.0,
+          "channel": "POS",
+          "settled_at": "2026-11-06T17:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "CLEARED",
+      "severity": "NONE",
+      "sweepable_total": 10009000.0,
+      "alert_types": [],
+      "flagged_bank_references": []
+    }
+  }
+]
