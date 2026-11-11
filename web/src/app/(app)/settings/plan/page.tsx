@@ -10,7 +10,7 @@ import { SettingsFrame } from '@/components/SettingsFrame';
 
 export default function PlanPage() {
   const { data: s } = useSummary();
-  const { merchantId, bump } = useSession();
+  const { merchantId, applySummary } = useSession();
   const [rate, setRate] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
@@ -32,8 +32,7 @@ export default function PlanPage() {
     setBusy(true);
     setError('');
     try {
-      await api.updateSettings(merchantId, { rateBps: rate });
-      bump();
+      applySummary(await api.updateSettings(merchantId, { rateBps: rate }));
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (e) {
@@ -45,8 +44,7 @@ export default function PlanPage() {
 
   async function resume() {
     if (!merchantId) return;
-    await api.updateSettings(merchantId, { pauseHours: 0 });
-    bump();
+    applySummary(await api.updateSettings(merchantId, { pauseHours: 0 }));
   }
 
   return (

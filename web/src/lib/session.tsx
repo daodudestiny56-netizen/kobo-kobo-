@@ -3,6 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api } from './api';
 import type { FeedItem, Summary } from './api/types';
+import { ApiError } from './api/errors';
+import { plainError } from './text';
 
 const ID_KEY = 'kobokobo.merchantId';
 const HIDE_KEY = 'kobokobo.hideBalance';
@@ -16,6 +18,10 @@ interface SessionValue {
   /** Bumped after anything that changes server state, so screens reload. */
   version: number;
   bump: () => void;
+  /** The signed-in trader's summary, fetched once for the whole app (every summary call costs the server a bank call). */
+  summary: Loaded<Summary>;
+  /** Use a summary the server just returned (settings calls return one), instead of asking for it again. */
+  applySummary: (s: Summary) => void;
   hideBalance: boolean;
   setHideBalance: (v: boolean) => void;
   /** Shows the demo controls (simulate a customer payment, skip time). On by default only on the mock API. */
@@ -47,6 +53,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [version, setVersion] = useState(0);
   const [hideBalance, setHide] = useState(false);
   const [demoMode, setDemo] = useState(false);
+  const [summary, setSummary] = useState<Loaded<Summary>>({ data: null, error: '', loading: true });
 
   useEffect(() => {
     setMerchantId(read(ID_KEY));
@@ -69,6 +76,39 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setMerchantId(null);
   }, []);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
+
+  const applySummary = useCallback((s: Summary) => setSummary({ data: s, error: '', loading: false }), []);
+
+  // One request for the whole app. It reloads after any action (bump) and when the tab comes back into view.
+  useEffect(() => {
+    if (!merchantId) {
+      setSummary({ data: null, error: '', loading: false });
+      return;
+    }
+    let live = true;
+    setSummary((p) => (p.data && p.data.merchant.id === merchantId ? p : { data: null, error: '', loading: true }));
+    api
+      .summary(merchantId)
+      .then((s) => live && setSummary({ data: s, error: '', loading: false }))
+      .catch((e: Error) => {
+        if (!live) return;
+        // The demo was reset, or the account is gone. A missing endpoint (HTTP_404) is not the same thing.
+        const gone = (e instanceof ApiError && e.status === 404 && !e.code.startsWith('HTTP_')) || /unknown merchant/i.test(e.message);
+        if (gone) signOut();
+        setSummary((p) => ({ data: p.data, error: plainError(e), loading: false }));
+      });
+    return () => {
+      live = false;
+    };
+  }, [merchantId, version, signOut]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') setVersion((v) => v + 1);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
   const setHideBalance = useCallback((v: boolean) => {
     write(HIDE_KEY, v ? '1' : null);
     setHide(v);
@@ -80,8 +120,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ ready, merchantId, signIn, signOut, version, bump, hideBalance, setHideBalance, demoMode, setDemoMode }),
-    [ready, merchantId, signIn, signOut, version, bump, hideBalance, setHideBalance, demoMode, setDemoMode],
+    () => ({ ready, merchantId, signIn, signOut, version, bump, summary, applySummary, hideBalance, setHideBalance, demoMode, setDemoMode }),
+    [ready, merchantId, signIn, signOut, version, bump, summary, applySummary, hideBalance, setHideBalance, demoMode, setDemoMode],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -98,29 +138,9 @@ export interface Loaded<T> {
   loading: boolean;
 }
 
-/** Loads the signed-in trader's summary and reloads when `version` changes. */
+/** The signed-in trader's summary. It is loaded once by the provider and shared by every screen. */
 export function useSummary(): Loaded<Summary> {
-  const { merchantId, version, signOut } = useSession();
-  const [state, setState] = useState<Loaded<Summary>>({ data: null, error: '', loading: true });
-
-  useEffect(() => {
-    if (!merchantId) return;
-    let live = true;
-    api
-      .summary(merchantId)
-      .then((s) => live && setState({ data: s, error: '', loading: false }))
-      .catch((e: Error) => {
-        if (!live) return;
-        // A reset demo or a removed account leaves a stale id: send the user back to sign in.
-        if (/unknown merchant/i.test(e.message)) signOut();
-        setState((p) => ({ data: p.data, error: e.message, loading: false }));
-      });
-    return () => {
-      live = false;
-    };
-  }, [merchantId, version, signOut]);
-
-  return state;
+  return useSession().summary;
 }
 
 /** Loads the account feed (customer payments, savings, withdrawals) and reloads when `version` changes. */
@@ -134,7 +154,7 @@ export function useFeed(): Loaded<FeedItem[]> {
     api
       .feed(merchantId)
       .then((f) => live && setState({ data: f, error: '', loading: false }))
-      .catch((e: Error) => live && setState((p) => ({ data: p.data, error: e.message, loading: false })));
+      .catch((e: Error) => live && setState((p) => ({ data: p.data, error: plainError(e), loading: false })));
     return () => {
       live = false;
     };

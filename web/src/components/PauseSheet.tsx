@@ -7,7 +7,7 @@ import { Sheet } from './Sheet';
 
 // Restock mode: skip the nightly saving for a while. Pausing costs nothing and can be undone at any time.
 export function PauseSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { merchantId, bump } = useSession();
+  const { merchantId, applySummary } = useSession();
   const [hours, setHours] = useState(24);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -17,8 +17,7 @@ export function PauseSheet({ open, onClose }: { open: boolean; onClose: () => vo
     setBusy(true);
     setError('');
     try {
-      await api.updateSettings(merchantId, { pauseHours: hours });
-      bump();
+      applySummary(await api.updateSettings(merchantId, { pauseHours: hours }));
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not pause. Try again.');

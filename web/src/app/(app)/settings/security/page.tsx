@@ -11,7 +11,7 @@ import { SettingsFrame } from '@/components/SettingsFrame';
 
 export default function SecurityPage() {
   const { data: s } = useSummary();
-  const { merchantId, bump, signOut } = useSession();
+  const { merchantId, applySummary, signOut } = useSession();
   const router = useRouter();
   const [stopOpen, setStopOpen] = useState(false);
   const [error, setError] = useState('');
@@ -24,8 +24,7 @@ export default function SecurityPage() {
     if (!merchantId) return;
     setBusy(true);
     try {
-      await api.updateSettings(merchantId, { cancel: true });
-      bump();
+      applySummary(await api.updateSettings(merchantId, { cancel: true }));
       setStopOpen(false);
     } catch (e) {
       setError(plainError(e));
@@ -36,8 +35,7 @@ export default function SecurityPage() {
 
   async function restart() {
     if (!merchantId) return;
-    await api.updateSettings(merchantId, { reactivate: true });
-    bump();
+    applySummary(await api.updateSettings(merchantId, { reactivate: true }));
   }
 
   return (

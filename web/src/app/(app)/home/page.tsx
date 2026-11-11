@@ -8,6 +8,7 @@ import type { FeedItem } from '@/lib/api/types';
 import { greeting } from '@/lib/activity';
 import { fmtDate, fmtDay, fmtShortDay, naira, nairaShort, pct } from '@/lib/money';
 import { useFeed, useSession, useSummary } from '@/lib/session';
+import { firstName, plainError } from '@/lib/text';
 import { BarChart } from '@/components/BarChart';
 import { FeedDetail } from '@/components/FeedDetail';
 import { FeedRow } from '@/components/FeedRow';
@@ -19,13 +20,26 @@ const DAY = 86_400_000;
 export default function HomePage() {
   const { data: s, error } = useSummary();
   const { data: feed } = useFeed();
-  const { merchantId, hideBalance, setHideBalance, bump } = useSession();
+  const { merchantId, hideBalance, setHideBalance, applySummary, bump } = useSession();
   const [pauseOpen, setPauseOpen] = useState(false);
   const [range, setRange] = useState<30 | 90>(90);
   const [detail, setDetail] = useState<FeedItem | null>(null);
   const [copied, setCopied] = useState(false);
 
   const recent = useMemo(() => (feed ?? []).filter((f) => f.kind !== 'skipped').slice(0, 6), [feed]);
+
+  if (!s && error) {
+    return (
+      <div className="page page-center">
+        <h1 className="h1">We could not load your account</h1>
+        <p className="muted mt2">{plainError(error)}</p>
+        <div className="row wrap mt5">
+          <button className="btn btn-primary" onClick={bump}>Try again</button>
+          <Link href="/settings/security" className="btn btn-secondary">Settings</Link>
+        </div>
+      </div>
+    );
+  }
 
   if (!s) {
     return (
@@ -60,13 +74,11 @@ export default function HomePage() {
 
   async function resume() {
     if (!merchantId) return;
-    await api.updateSettings(merchantId, { pauseHours: 0 });
-    bump();
+    applySummary(await api.updateSettings(merchantId, { pauseHours: 0 }));
   }
   async function acceptSuggestion() {
     if (!merchantId || !s?.smartRate) return;
-    await api.updateSettings(merchantId, { rateBps: s.smartRate.suggestedBps });
-    bump();
+    applySummary(await api.updateSettings(merchantId, { rateBps: s.smartRate.suggestedBps }));
   }
   async function copyAccount() {
     try {
@@ -83,7 +95,7 @@ export default function HomePage() {
       <div className="dash-head">
         <div>
           <p className="muted">{greeting()},</p>
-          <h1 className="h1">{m.fullName.split(' ')[0]}</h1>
+          <h1 className="h1">{firstName(m.fullName)}</h1>
         </div>
         <div className="row wrap">
           <Link href="/savings/withdraw" className="btn btn-primary"><Wallet size={20} aria-hidden /> Withdraw</Link>

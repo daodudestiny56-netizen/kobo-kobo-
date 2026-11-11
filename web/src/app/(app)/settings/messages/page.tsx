@@ -19,7 +19,7 @@ const LANGS: { v: Lang; label: string }[] = [
 
 export default function MessagesPage() {
   const { data: s } = useSummary();
-  const { merchantId, bump } = useSession();
+  const { merchantId, applySummary } = useSession();
   const [error, setError] = useState('');
 
   if (!s) return <SettingsFrame title="Language and messages"><div className="skeleton" style={{ height: 240 }} aria-busy="true" /></SettingsFrame>;
@@ -29,8 +29,7 @@ export default function MessagesPage() {
   async function change(l: Lang) {
     if (!merchantId) return;
     try {
-      await api.updateSettings(merchantId, { language: l });
-      bump();
+      applySummary(await api.updateSettings(merchantId, { language: l }));
     } catch (e) {
       setError(plainError(e));
     }

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import { naira } from '@/lib/money';
 import { useSession, useSummary } from '@/lib/session';
+import { displayName } from '@/lib/text';
 import { SettingsFrame } from '@/components/SettingsFrame';
 
 // Transfer limits by account tier (Forge sandbox guide, section 5.2).
@@ -39,7 +40,7 @@ export default function AccountPage() {
 
       <ul className="facts mt5">
         <li><span className="k">Bank</span><span className="v">{a.bankName}</span></li>
-        <li><span className="k">Account name</span><span className="v">{s.merchant.fullName}</span></li>
+        <li><span className="k">Account name</span><span className="v">{displayName(s.merchant.fullName)}</span></li>
         <li>
           <span className="k">Account number</span>
           <span className="v mono">

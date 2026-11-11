@@ -1,6 +1,7 @@
 'use client';
 
 import { useSummary } from '@/lib/session';
+import { displayName } from '@/lib/text';
 import { SettingsFrame } from '@/components/SettingsFrame';
 
 export default function ProfilePage() {
@@ -11,7 +12,7 @@ export default function ProfilePage() {
   return (
     <SettingsFrame title="Profile">
       <ul className="facts">
-        <li><span className="k">Name</span><span className="v">{m.fullName}</span></li>
+        <li><span className="k">Name</span><span className="v">{displayName(m.fullName)}</span></li>
         <li><span className="k">Phone</span><span className="v">{m.phone}</span></li>
         <li><span className="k">Bank account</span><span className="v">{m.bankAccount}</span></li>
         <li><span className="k">Bank</span><span className="v">Xtradot Bank</span></li>

@@ -1,5 +1,6 @@
 import type { SweepRecord } from '@/lib/api/types';
 import { naira, pct } from '@/lib/money';
+import { firstName } from '@/lib/text';
 
 const TAG: Record<string, string> = {
   SETTLED: 'tag-brand',
@@ -42,7 +43,7 @@ export function SweepTable({ sweeps, onRequery }: { sweeps: SweepRecord[]; onReq
           {sweeps.map((s) => (
             <tr key={s.id}>
               <td className="num">{s.sweepDate}</td>
-              <td>{s.merchantName.split(' ')[0]}</td>
+              <td>{firstName(s.merchantName)}</td>
               <td className="r num">{naira(s.takingsKobo)}</td>
               <td className="r">{pct(s.rateBps)}</td>
               <td className="r num"><b>{naira(s.sweepKobo)}</b></td>
