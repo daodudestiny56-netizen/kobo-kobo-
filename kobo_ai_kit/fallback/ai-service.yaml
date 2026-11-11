@@ -1,0 +1,55 @@
+# FALLBACK ONLY (team decision: no second service). Lead's limits if used: at most 100m CPU / 192Mi, no shared DB (history is sent in the request body), the Node app calls it with a 2 s timeout and falls back to static output.
+# TEMPLATE, NOT APPLIED OR TESTED: adjust registry, namespace and volume to your cluster, and ask Caleb who owns deploys.
+# PRD v3: ONE public service ("app", port 80). This service is INTERNAL ONLY (ClusterIP): the app calls it at
+#   http://ai.team07.svc.cluster.local     and it calls the app at   http://app.team07.svc.cluster.local
+# Namespace budget (PRD): 10 pods, 400m CPU, 768Mi memory in total. This pod asks for very little.
+#
+# Secrets (create once, never commit values):
+#   kubectl -n team07 create secret generic kobo-ai-secrets \
+#     --from-literal=NAIJALINGO_API_KEY=... --from-literal=VOICE_URL_SECRET=<long random> \
+#     --from-literal=AI_SERVICE_TOKEN=<shared with app> --from-literal=GUARD_TOKEN=<shared with app> \
+#     --from-literal=SERVICE_TOKEN=<core's service token>
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kobo-ai
+  namespace: team07
+spec:
+  replicas: 1                      # one worker renders audio one clip at a time (the 9jaLingo server does the same)
+  selector:
+    matchLabels: {app: kobo-ai}
+  template:
+    metadata:
+      labels: {app: kobo-ai}
+    spec:
+      containers:
+        - name: kobo-ai
+          image: REGISTRY/kobo-ai:v1           # build with --platform linux/amd64; never "latest"
+          ports: [{containerPort: 8080}]
+          envFrom:
+            - secretRef: {name: kobo-ai-secrets}
+          env:
+            - {name: PORT, value: "8080"}
+            - {name: VOICE_CACHE_DIR, value: /data/voice_cache}
+            - {name: CORE_URL, value: "http://app.team07.svc.cluster.local"}
+            - {name: GUARD_MODE, value: "partial"}           # PRD v3 9.1; use "whole" for the original Rails core
+            - {name: PUBLIC_BASE_URL, value: "https://team07.xtradot.co/ai"}   # the app must proxy /ai/* to this service (audio links)
+          readinessProbe: {httpGet: {path: /healthz, port: 8080}, periodSeconds: 10}
+          livenessProbe:  {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 15, periodSeconds: 20}
+          resources:
+            requests: {cpu: 50m,  memory: 128Mi}
+            limits:   {cpu: 100m, memory: 192Mi}
+          volumeMounts: [{name: data, mountPath: /data}]
+      volumes:
+        - name: data
+          emptyDir: {}             # clips are re-creatable, but a PVC keeps pre-rendered demo audio across restarts (recommended)
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai
+  namespace: team07
+spec:
+  type: ClusterIP
+  selector: {app: kobo-ai}
+  ports: [{port: 80, targetPort: 8080}]

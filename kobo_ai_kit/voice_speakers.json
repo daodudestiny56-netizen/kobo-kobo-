@@ -1,0 +1,9 @@
+{
+  "_readme": "Your preferred 9jaLingo voice ID for each voice language (pcm = Pidgin and English, yo = Yoruba, ha = Hausa, ig = Igbo). Change an ID here, or override with the environment variables VOICE_SPEAKER_PCM / _YO / _HA / _IG in .env. If the server does not know an ID, the system falls back to a built-in default voice and reports it. Find and audition voices with: python voice_tool.py voices   and   python voice_tool.py audition",
+  "preferred": {
+    "pcm": "0c97feb8-bcb1-4734-913d-7ff21bfa0d76",
+    "yo": "734c28e8-900a-48f0-ad64-d1f1d906172e",
+    "ha": "ed1e63ff-6348-4774-8a20-f69babc64dab",
+    "ig": "3eefa712-3a46-4b3e-ab7f-1baeab556858"
+  }
+}
