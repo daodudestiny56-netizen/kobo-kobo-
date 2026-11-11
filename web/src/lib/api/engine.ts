@@ -9,7 +9,9 @@ import type {
   GuardAlert,
   Lang,
   Merchant,
+  Consent,
   OnboardRequest,
+  OnboardResult,
   OpsOverview,
   SettingsPatch,
   SmartRate,
@@ -19,20 +21,14 @@ import type {
   WithdrawalEligibility,
 } from './types';
 import { fmtDate, naira, nairaPlain } from '../money';
+import { ApiError } from './errors';
+import { DEMO_TRADERS } from './fixtures';
 import { SMS_HELP, balanceSms, receiptSms } from '../messages';
 
 const DAY = 86_400_000;
 const BUFFER_KOBO = 100_000; // 1,000 naira
 const DAILY_CAP_KOBO = 500_000; // 5,000 naira
 const HOLD_THRESHOLD_KOBO = 50_000_000; // mock guard rule only; the real one is mean + 3 sigma (PRD 9.1)
-
-// Synthetic sandbox fixtures (Forge guide 5.4). Phone numbers are fake.
-export const DEMO_TRADERS: DemoTrader[] = [
-  { fullName: 'Adaeze Chiamaka Okonkwo', bankAccount: '0123456789', bvn: '22200000001', nin: '70000000001', tier: 3, phone: '+2348000000001', language: 'pidgin' },
-  { fullName: 'Babatunde Olumide Adeyemi', bankAccount: '0123456790', bvn: '22200000002', nin: '70000000002', tier: 3, phone: '+2348000000002', language: 'yoruba' },
-  { fullName: 'Musa Ibrahim Abdullahi', bankAccount: '0123456791', bvn: '22200000003', nin: '70000000003', tier: 2, phone: '+2348000000003', language: 'hausa' },
-  { fullName: 'Efosa Godwin Osagie', bankAccount: '0123456792', bvn: '22200000004', nin: '70000000004', tier: 1, phone: '+2348000000004', language: 'en' },
-];
 
 const OPENING_BALANCE_KOBO: Record<string, number> = {
   '0123456789': 150_000_000,
@@ -435,6 +431,52 @@ function need(idv: string): MState {
   return m;
 }
 
+// ---------- onboarding (mirrors src/onboarding/service.ts) ----------
+
+const CONSENT_VERSION = '2026-11-v1';
+const CONSENT_TEXT =
+  'I agree that Kobo Kobo may move a percentage of my daily takings (starting at 2%; I can choose 1% to 5%) ' +
+  'from my own bank account into my pension each night, split 50/50 between an emergency pot and a retirement pot. ' +
+  'Nothing is taken on days with no sales. The emergency pot can be withdrawn from 3 months after my first ' +
+  'contribution, then once every 2 months. The retirement pot is locked until age 50. I can pause, change or stop ' +
+  'at any time. Returns are not guaranteed and may be negative. This is a sandbox demo with simulated components.';
+
+const LANGS: Lang[] = ['en', 'pidgin', 'yoruba', 'hausa', 'igbo'];
+let attempts: number[] = []; // the backend allows 5 onboarding attempts a minute per address
+
+// BVN 22200000005 stands in for "names are close but not identical" so that path can be shown. It is mock-only.
+const NEEDS_REVIEW_BVN = '22200000005';
+
+function enrol(t: DemoTrader, phone: string, language: Lang): Merchant {
+  const mid = id('m');
+  const merchant: Merchant = {
+    id: mid,
+    fullName: t.fullName,
+    phone,
+    bankAccount: t.bankAccount,
+    virtualAccount: `88${t.bankAccount.slice(2)}`,
+    rsaPin: `PEN${String(Math.floor(Math.random() * 1e12)).padStart(12, '0')}`,
+    language,
+    rateBps: 200,
+    pausedUntil: null,
+    status: 'ACTIVE',
+  };
+  store.merchants[mid] = {
+    merchant,
+    balanceKobo: OPENING_BALANCE_KOBO[t.bankAccount] ?? 10_000_000,
+    emergencyKobo: 0,
+    retirementKobo: 0,
+    firstContribAt: null,
+    lastWithdrawAt: null,
+    withdrawnKobo: 0,
+    withdrawals: [],
+    inflows: [],
+  };
+  seedHistory(store.merchants[mid], t.bankAccount);
+  save();
+  return merchant;
+}
+
 // ---------- API surface ----------
 
 export const engine = {
@@ -442,46 +484,40 @@ export const engine = {
 
   merchants: (): Merchant[] => Object.values(store.merchants).map((m) => m.merchant),
 
-  onboard(req: OnboardRequest): Merchant {
-    const t = DEMO_TRADERS.find((x) => x.bankAccount === req.bankAccount);
-    if (!t) throw new Error('ACCOUNT_NOT_FOUND: that account does not exist in the sandbox.');
-    if (req.bvn === '22299999999') throw new Error('BVN_MISMATCH: identity check returned no match.');
-    if (req.bvn !== t.bvn) throw new Error('BVN_MISMATCH: the BVN does not belong to this account holder.');
-    if (req.nin && req.nin !== t.nin) throw new Error('NIN check failed: no match.');
-    if (!req.consent) throw new Error('Consent is required to join.');
-    const existing = Object.values(store.merchants).find((m) => m.merchant.bankAccount === req.bankAccount);
-    if (existing) {
-      existing.merchant.status = 'ACTIVE';
-      save();
-      return existing.merchant;
+  consent: (): Consent => ({ version: CONSENT_VERSION, text: CONSENT_TEXT }),
+
+  onboard(req: OnboardRequest): OnboardResult {
+    const t0 = Date.now();
+    attempts = attempts.filter((t) => t0 - t < 60_000);
+    if (attempts.length >= 5) throw new ApiError(429, 'RATE_LIMITED', 'Too many attempts, try again in a minute');
+    attempts.push(t0);
+
+    const phone = String(req.phone ?? '').replace(/[\s-]/g, '');
+    if (!/^\+?\d{10,15}$/.test(phone)) throw new ApiError(400, 'INVALID_REQUEST', 'phone must be 10 to 15 digits', 'phone');
+    const account = String(req.bankAccount ?? '');
+    if (!/^\d{10}$/.test(account)) throw new ApiError(400, 'INVALID_REQUEST', 'bankAccount must be 10 digits', 'bankAccount');
+    const bvn = String(req.bvn ?? '');
+    if (!/^\d{11}$/.test(bvn)) throw new ApiError(400, 'INVALID_REQUEST', 'bvn must be 11 digits', 'bvn');
+    const language = (req.language ?? 'pidgin') as Lang;
+    if (!LANGS.includes(language)) throw new ApiError(400, 'INVALID_REQUEST', 'unsupported language', 'language');
+    if (req.consentAccepted !== true) throw new ApiError(400, 'CONSENT_REQUIRED', 'Consent must be accepted', 'consentAccepted');
+    if (req.consentVersion !== CONSENT_VERSION) {
+      throw new ApiError(400, 'CONSENT_VERSION_MISMATCH', 'The consent text has changed. Reload and accept again', 'consentVersion');
     }
-    const mid = id('m');
-    const merchant: Merchant = {
-      id: mid,
-      fullName: t.fullName,
-      phone: req.phone || t.phone,
-      bankAccount: t.bankAccount,
-      virtualAccount: `88${t.bankAccount.slice(2)}`,
-      rsaPin: `PEN${String(Math.floor(Math.random() * 1e12)).padStart(12, '0')}`,
-      language: req.language,
-      rateBps: req.rateBps,
-      pausedUntil: null,
-      status: 'ACTIVE',
-    };
-    store.merchants[mid] = {
-      merchant,
-      balanceKobo: OPENING_BALANCE_KOBO[t.bankAccount] ?? 10_000_000,
-      emergencyKobo: 0,
-      retirementKobo: 0,
-      firstContribAt: null,
-      lastWithdrawAt: null,
-      withdrawnKobo: 0,
-      withdrawals: [],
-      inflows: [],
-    };
-    seedHistory(store.merchants[mid], t.bankAccount);
-    save();
-    return merchant;
+
+    const bvnAccount = DEMO_TRADERS.find((x) => x.bvn === bvn)?.bankAccount;
+    const dup = Object.values(store.merchants).some((m) => m.merchant.bankAccount === account || m.merchant.phone === phone || m.merchant.bankAccount === bvnAccount);
+    if (dup) throw new ApiError(409, 'ALREADY_ENROLLED', 'These details are already enrolled');
+
+    const owner = DEMO_TRADERS.find((x) => x.bvn === bvn);
+    if (!owner && bvn !== NEEDS_REVIEW_BVN) throw new ApiError(422, 'IDENTITY_NOT_VERIFIED', 'BVN could not be verified', 'bvn');
+    const t = DEMO_TRADERS.find((x) => x.bankAccount === account);
+    if (!t) throw new ApiError(422, 'ACCOUNT_NOT_FOUND', 'Account not found', 'bankAccount');
+    if (bvn === NEEDS_REVIEW_BVN) throw new ApiError(422, 'NAME_NEEDS_REVIEW', 'Names are close but not identical, so this needs manual review');
+    if (owner && owner.bankAccount !== t.bankAccount) throw new ApiError(422, 'NAME_MISMATCH', 'The BVN name does not match the account name');
+
+    const m = enrol(t, phone, language);
+    return { merchantId: m.id, fullName: m.fullName, language, rateBps: 200 };
   },
 
   summary: (mid: string): Summary => buildSummary(need(mid)),
@@ -491,24 +527,24 @@ export const engine = {
   activity: (mid: string): SweepRecord[] =>
     store.sweeps.filter((s) => s.merchantId === mid).slice().reverse(),
 
-  resolveAccount(account: string) {
-    const t = DEMO_TRADERS.find((x) => x.bankAccount === account);
-    if (!t) throw new Error('ACCOUNT_NOT_FOUND: no account with that number in the sandbox bank.');
-    return { name: t.fullName, tier: t.tier };
-  },
-
   // The sandbox accepts OTP 123456 for cards and consents (Forge guide 5.4); we reuse it for sign-in.
   verifyOtp(phone: string, code: string) {
-    if (code !== '123456') throw new Error('INVALID_OTP: that code is not right.');
+    if (code !== '123456') throw new ApiError(400, 'INVALID_OTP', 'that code is not right.');
     const m = engine.byPhone(phone);
     return { merchantId: m ? m.merchant.id : null };
   },
 
-  // Demo-only shortcut: enrol a sandbox trader with their own synthetic details.
-  demoSignIn(account: string): Merchant {
+  // Demo-only shortcut: open a sandbox trader with their own synthetic details (or return the one already open).
+  demoSignIn(account: string): { merchantId: string } {
     const t = DEMO_TRADERS.find((x) => x.bankAccount === account);
-    if (!t) throw new Error('ACCOUNT_NOT_FOUND');
-    return engine.onboard({ bankAccount: t.bankAccount, bvn: t.bvn, nin: t.nin, phone: t.phone, language: t.language, rateBps: 200, consent: true });
+    if (!t) throw new ApiError(422, 'ACCOUNT_NOT_FOUND', 'Account not found', 'bankAccount');
+    const existing = Object.values(store.merchants).find((m) => m.merchant.bankAccount === account);
+    if (existing) {
+      existing.merchant.status = 'ACTIVE';
+      save();
+      return { merchantId: existing.merchant.id };
+    }
+    return { merchantId: enrol(t, t.phone, t.language).id };
   },
 
   updateSettings(mid: string, p: SettingsPatch): Summary {

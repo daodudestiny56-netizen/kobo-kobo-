@@ -143,14 +143,29 @@ export interface OpsOverview {
   clockOffsetDays: number;
 }
 
+// POST /api/v1/merchants/onboard (src/onboarding/service.ts). BVN only, no NIN. The share of sales starts at 2%.
 export interface OnboardRequest {
+  phone: string;
   bankAccount: string;
   bvn: string;
-  nin: string;
-  phone: string;
+  language: Lang;
+  consentAccepted: boolean;
+  consentVersion: string;
+}
+
+export interface OnboardResult {
+  merchantId: string;
+  fullName: string;
   language: Lang;
   rateBps: number;
-  consent: boolean;
+  /** Present when the server returns the whole trader (it does once the engine is mounted). */
+  rsaPin?: string;
+}
+
+// GET /api/v1/consent: the exact text the person agrees to, and its version.
+export interface Consent {
+  version: string;
+  text: string;
 }
 
 export interface SettingsPatch {
@@ -164,13 +179,13 @@ export interface SettingsPatch {
 export interface Api {
   listDemoTraders(): Promise<DemoTrader[]>;
   listMerchants(): Promise<Merchant[]>;
-  onboard(req: OnboardRequest): Promise<Merchant>;
+  consent(): Promise<Consent>;
+  onboard(req: OnboardRequest): Promise<OnboardResult>;
   summary(id: string): Promise<Summary>;
   activity(id: string): Promise<SweepRecord[]>;
   feed(id: string): Promise<FeedItem[]>;
-  resolveAccount(account: string): Promise<{ name: string; tier: number }>;
   verifyOtp(phone: string, code: string): Promise<{ merchantId: string | null }>;
-  demoSignIn(account: string): Promise<Merchant>;
+  demoSignIn(account: string): Promise<{ merchantId: string }>;
   updateSettings(id: string, patch: SettingsPatch): Promise<Summary>;
   withdraw(id: string, amountKobo: number): Promise<{ ok: boolean; message: string }>;
   ussd(phone: string, sessionId: string, text: string): Promise<{ type: 'CON' | 'END'; body: string }>;
