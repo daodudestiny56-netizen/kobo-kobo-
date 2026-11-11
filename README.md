@@ -17,16 +17,17 @@ Kobo Kobo moves a small share of a trader's daily takings into their own pension
 3. [Architecture](#architecture)
 4. [The bank we build on](#the-bank-we-build-on)
 5. [The web app](#the-web-app)
-6. [API](#api)
-7. [Run it locally](#run-it-locally)
-8. [Configuration](#configuration)
-9. [Deployment](#deployment)
-10. [Security, privacy and compliance](#security-privacy-and-compliance)
-11. [What is real and what is simulated](#what-is-real-and-what-is-simulated)
-12. [How we built it](#how-we-built-it)
-13. [Status and known gaps](#status-and-known-gaps)
-14. [Team](#team)
-15. [Credits](#credits)
+6. [Testing USSD and SMS](#testing-ussd-and-sms)
+7. [API](#api)
+8. [Run it locally](#run-it-locally)
+9. [Configuration](#configuration)
+10. [Deployment](#deployment)
+11. [Security, privacy and compliance](#security-privacy-and-compliance)
+12. [What is real and what is simulated](#what-is-real-and-what-is-simulated)
+13. [How we built it](#how-we-built-it)
+14. [Status and known gaps](#status-and-known-gaps)
+15. [Team](#team)
+16. [Credits](#credits)
 
 ## The problem
 
@@ -144,9 +145,30 @@ Next.js (App Router, TypeScript) in `web/`, designed as a real fintech product: 
 - **Mock mode (default).** The whole backend lives in the browser (`web/src/lib/api/engine.ts`) and follows the same rules as the real one. It includes a **demo bank**: when a trader signs in it seeds a linked account, months of customer payments and nightly savings, pots, a past withdrawal and statistics, so no screen is ever empty. It returns the same error codes as the server.
 - **Live mode.** `NEXT_PUBLIC_API_MODE=live` talks to the real backend through `/api/v1`. Reads and settings updates are retried once on a dropped connection, money-moving calls never are. One shared summary request serves the whole app, because each summary costs the server a bank call.
 
+**Installable.** The web app has a manifest with 192px, 512px and maskable icons and a small service worker, so Chrome and Android offer "Install" (Settings, About has a button) and iPhone can Add to Home Screen. Offline it shows a plain "You are offline" page. The service worker never caches the API or personal pages, and it only registers in production builds.
+
 **Demo controls** (simulate a customer paying, run tonight's saving, skip time, reset) are behind a switch in Settings, About, and in live mode need the shared demo key or an open server. They stay out of the way of a normal trader.
 
 Details, including every route and the full API table, are in [web/README.md](web/README.md).
+
+## Testing USSD and SMS
+
+There is no mobile network, so both channels are simulated. They run the same code the app uses, so a refusal reads the same on every channel.
+
+**On screen (easiest).** Turn on demo controls (open `/sign-in?demo=1` once), then open **Button phone** (`/demo/phone`). Pick a trader, dial `*384*5050#` and follow the menu: 1 balance, 2 tonight's saving, 3 change share, 4 pause or resume, 5 cash out, 6 spoken balance. `0` goes back and `99` returns to the main menu. The SMS tab takes `BAL`, `PAUSE`, `RESUME`, `RATE 3`, `CASHOUT 5000`, `STOP`, `HELP`, `YES`, `NO`.
+
+**Against the API.** The phone number must belong to an enrolled trader. The four demo traders are seeded on boot with phones `+2348000000001` to `+2348000000004` (Adaeze, Babatunde, Musa, Efosa):
+
+```bash
+# USSD: "text" is the whole path so far, "" opens the menu
+curl -s localhost:8080/api/v1/ussd -H 'content-type: application/json'   -d '{"phoneNumber":"+2348000000001","text":"1"}'
+# add ?format=text to get the raw "CON ..." / "END ..." a telco expects
+
+# SMS
+curl -s localhost:8080/api/v1/sms/inbound -H 'content-type: application/json'   -d '{"from":"+2348000000001","text":"BAL"}'
+```
+
+**Things worth trying.** `CASHOUT 5000` on a new trader (refused with the vesting rule, the same sentence as in the app); `PAUSE` then `RESUME`; `RATE 6` (refused, the share is 1% to 5%); `STOP` then `YES`. `server/scripts/smoke.mjs` drives the same calls end to end, and `server/tests` has the unit tests.
 
 ## API
 
