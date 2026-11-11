@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useSession } from '@/lib/session';
 import { SettingsFrame } from '@/components/SettingsFrame';
+import { InstallApp } from '@/components/InstallApp';
 
 export default function AboutPage() {
   const { demoMode, setDemoMode } = useSession();
@@ -18,6 +19,10 @@ export default function AboutPage() {
         <li><span className="k">USSD, SMS and voice</span><span className="v">Simulated, no mobile network</span></li>
         <li><span className="k">Customer payments</span><span className="v">Simulated</span></li>
       </ul>
+
+      <h3 className="h2 mt6">Install on your phone</h3>
+      <p className="hint mt2">Add Kobo Kobo to your home screen so it opens like an app.</p>
+      <InstallApp />
 
       <h3 className="h2 mt6">Demo controls</h3>
       <p className="hint mt2">Adds tools for presenting: simulate a customer payment, run tonight&apos;s saving, skip time, and open the button phone and operations console.</p>
