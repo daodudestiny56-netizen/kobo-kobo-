@@ -1,0 +1,8 @@
+**/node_modules
+**/dist
+**/*.sqlite*
+.git
+.env*
+team*.yml
+kubeconfig*
+k8s
