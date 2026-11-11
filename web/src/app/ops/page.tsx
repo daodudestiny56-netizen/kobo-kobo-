@@ -17,9 +17,10 @@ const FORCE: { v: ForceOutcome; label: string }[] = [
 ];
 
 export default function OpsOverviewPage() {
-  const { data: o, error, run } = useOps();
+  const { data: o, error, run, gate } = useOps();
   const [force, setForce] = useState<ForceOutcome>('none');
 
+  if (gate) return gate;
   if (!o) return <div className="page" aria-busy="true"><div className="skeleton" style={{ height: 200 }} />{error && <p className="error-text mt4" role="alert">{error}</p>}</div>;
 
   const r = o.reconciliation;

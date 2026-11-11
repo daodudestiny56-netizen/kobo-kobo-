@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import type { Merchant } from '@/lib/api/types';
 import { useSession } from '@/lib/session';
-import { plainError } from '@/lib/text';
+import { firstName, plainError } from '@/lib/text';
 
 const DIAL = '*384*5050#';
 type Line = { from: 'me' | 'sys'; text: string };
@@ -23,11 +23,17 @@ export default function PhonePage() {
   const [sms, setSms] = useState('');
 
   useEffect(() => {
-    api.listMerchants().then((ms) => {
-      setMerchants(ms);
-      const mine = ms.find((m) => m.id === merchantId);
-      setPhone((p) => p || mine?.phone || ms[0]?.phone || '');
-    });
+    api
+      .listMerchants()
+      .then((ms) => {
+        setMerchants(ms);
+        const mine = ms.find((m) => m.id === merchantId);
+        setPhone((p) => p || mine?.phone || ms[0]?.phone || '');
+      })
+      .catch((e) => {
+        setMerchants([]);
+        setScreen(e && (e as { status?: number }).status === 401 ? 'The server needs the demo key. Open Demo tools and enter it, then reload.' : plainError(e));
+      });
   }, [merchantId, version]);
 
   async function dial() {
@@ -93,7 +99,7 @@ export default function PhonePage() {
         <label className="label" htmlFor="who">Phone number</label>
         <select id="who" className="select" value={phone} onChange={(e) => { setPhone(e.target.value); end(); }}>
           {merchants.length === 0 && <option value="">No one has joined yet</option>}
-          {merchants.map((m) => <option key={m.id} value={m.phone}>{m.fullName.split(' ')[0]} · {m.phone}</option>)}
+          {merchants.map((m) => <option key={m.id} value={m.phone}>{firstName(m.fullName)} · {m.phone}</option>)}
         </select>
       </div>
 

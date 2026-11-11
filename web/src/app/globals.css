@@ -483,3 +483,5 @@ dialog.sheet::backdrop { background: var(--ink); opacity: 0.55; }
 .error-text::before { content: '!'; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--brand); color: var(--white); font-size: 0.8125rem; font-weight: 800; flex-shrink: 0; }
 .handset-screen { background: var(--brand-tint); }
 .key-end { background: var(--ink); color: var(--white); }
+
+.mb4 { margin-bottom: var(--s4); }

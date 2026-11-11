@@ -3,7 +3,11 @@
 import { useState } from 'react';
 import { FlaskConical } from 'lucide-react';
 import { api } from '@/lib/api';
+import { ApiError } from '@/lib/api/errors';
+import { setDemoKey } from '@/lib/api/demoKey';
+import { plainError } from '@/lib/text';
 import { useSession } from '@/lib/session';
+import { DemoKeyForm } from './DemoKeyForm';
 import { Sheet } from './Sheet';
 
 // Sandbox-only controls for the demo (PRD 12 and 15). The live backend must put these behind a login.
@@ -11,6 +15,7 @@ export function DemoTools({ variant }: { variant: 'nav' | 'icon' }) {
   const { merchantId, bump } = useSession();
   const [open, setOpen] = useState(false);
   const [msg, setMsg] = useState('');
+  const [needKey, setNeedKey] = useState(false);
 
   async function act(label: string, fn: () => Promise<unknown>) {
     try {
@@ -18,7 +23,15 @@ export function DemoTools({ variant }: { variant: 'nav' | 'icon' }) {
       setMsg(label);
       bump();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'That did not work.');
+      if (e instanceof ApiError && e.status === 401) {
+        setDemoKey(null);
+        setNeedKey(true);
+        setMsg('');
+      } else if (e instanceof ApiError && e.code === 'NOT_FOUND') {
+        setMsg('Demo controls are switched off on the server.');
+      } else {
+        setMsg(plainError(e, 'That did not work.'));
+      }
     }
   }
 
@@ -47,6 +60,10 @@ export function DemoTools({ variant }: { variant: 'nav' | 'icon' }) {
       <Sheet open={open} onClose={() => setOpen(false)} title="Demo tools">
         <p className="hint">Sandbox only. These simulate things that happen outside the app, such as a customer paying or the clock moving on.</p>
 
+        {needKey ? (
+          <DemoKeyForm message="The server needs the demo key for this." onSaved={() => { setNeedKey(false); setMsg('Key saved. Try again.'); }} />
+        ) : (
+          <>
         <div>
           <p className="label">A customer pays you</p>
           <div className="row wrap mt2">
@@ -72,6 +89,9 @@ export function DemoTools({ variant }: { variant: 'nav' | 'icon' }) {
             <button className="btn btn-secondary btn-sm" onClick={() => act('Demo data reset.', () => api.demoReset())}>Reset all demo data</button>
           </div>
         </div>
+
+          </>
+        )}
 
         {msg && <p className="notice notice-brand" aria-live="polite">{msg}</p>}
       </Sheet>

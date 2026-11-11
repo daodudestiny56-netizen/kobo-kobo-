@@ -3,11 +3,13 @@
 import { api } from '@/lib/api';
 import { naira } from '@/lib/money';
 import { useOps } from '@/lib/ops';
+import { displayName } from '@/lib/text';
 
 const STATUS = { PENDING_REVIEW: 'Needs review', DISMISSED: 'Dismissed, counted next night', CONFIRMED: 'Confirmed, excluded' } as const;
 
 export default function OpsAlertsPage() {
-  const { data: o, error, run } = useOps();
+  const { data: o, error, run, gate } = useOps();
+  if (gate) return gate;
 
   return (
     <div className="page page-narrow" style={{ marginLeft: 0 }}>
@@ -21,7 +23,7 @@ export default function OpsAlertsPage() {
           {o.alerts.map((a) => (
             <li key={a.id} className="stack gap2" style={{ padding: 'var(--s4) 0' }}>
               <div className="row between wrap">
-                <p><b>{a.merchantName}</b> · <span className="num">{naira(a.amountKobo)}</span></p>
+                <p><b>{displayName(a.merchantName)}</b> · <span className="num">{naira(a.amountKobo)}</span></p>
                 <span className={`tag ${a.status === 'PENDING_REVIEW' ? 'tag-attn' : 'tag-brand'}`}>{STATUS[a.status]}</span>
               </div>
               <p className="muted">{a.detail}</p>

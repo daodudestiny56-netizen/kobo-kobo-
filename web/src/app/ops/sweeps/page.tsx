@@ -5,7 +5,8 @@ import { useOps } from '@/lib/ops';
 import { SweepTable } from '@/components/SweepTable';
 
 export default function OpsSweepsPage() {
-  const { data: o, error, run } = useOps();
+  const { data: o, error, run, gate } = useOps();
+  if (gate) return gate;
 
   return (
     <div className="page">
