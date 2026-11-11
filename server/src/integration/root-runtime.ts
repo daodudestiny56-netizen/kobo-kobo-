@@ -8,7 +8,8 @@ import { loadConfig, productionProblems } from '../config';
 import { AppError } from '../errors';
 import type { Deps } from '../deps';
 import { registerRoutes } from '../routes';
-import { AllowAllGuard, ThresholdGuard } from '../guard/port';
+import { ThresholdGuard } from '../guard/port';
+import { StatisticalGuard } from '../guard/statistical';
 import { startScheduler } from '../sweeps/scheduler';
 import { RootBankPort } from './root-bank';
 import { toWire } from '../wire';
@@ -35,9 +36,7 @@ export function registerEngineRuntime(app: FastifyInstance, db: Database.Databas
     config,
     clock: () => new Date(),
     bank: new RootBankPort(client, process.env.DEMO_MODE === '1'),
-    guard: config.guardHoldAboveNaira === null
-      ? new AllowAllGuard()
-      : new ThresholdGuard(BigInt(config.guardHoldAboveNaira) * 100n),
+    guard: new StatisticalGuard(db, config.guardHoldAboveNaira === null ? null : new ThresholdGuard(BigInt(config.guardHoldAboveNaira) * 100n)),
   };
 
   app.register(formbody);

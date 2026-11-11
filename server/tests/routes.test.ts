@@ -290,3 +290,25 @@ describe('demo controls', () => {
     expect((await app.inject({ method: 'POST', url: `${A}/merchants/${m.id}/suggestion/respond`, payload: { decision: 'accept' } })).statusCode).toBe(404);
   });
 });
+
+describe('SmartRate and SweepGuard over HTTP', () => {
+  it('POST /ops/smart-rate/run needs ops access and files nothing when asked only to analyse', async () => {
+    const { deps, app } = setup({}, AFTER_CUTOFF);
+    const m = fundedMerchant(deps);
+    expect((await app.inject({ method: 'POST', url: `${A}/ops/smart-rate/run`, payload: {} })).statusCode).toBe(401);
+    const r = await app.inject({ method: 'POST', url: `${A}/ops/smart-rate/run`, headers: ops, payload: { merchantId: m.id, file: false } });
+    expect(r.statusCode).toBe(200);
+    const [run] = data(r);
+    expect(run.merchantId).toBe(m.id);
+    expect(run.result).toMatchObject({ action: 'HOLD', holdReason: 'INSUFFICIENT_DATA' });
+    expect(run.suggestionId).toBeNull();
+  });
+
+  it('analyses every trader when no trader is named', async () => {
+    const { deps, app } = setup({}, AFTER_CUTOFF);
+    fundedMerchant(deps);
+    fundedMerchant(deps);
+    const r = await app.inject({ method: 'POST', url: `${A}/ops/smart-rate/run`, headers: ops, payload: {} });
+    expect(data(r)).toHaveLength(2);
+  });
+});

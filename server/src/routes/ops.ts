@@ -7,6 +7,7 @@ import { runBatch } from '../sweeps/batch';
 import { advanceSweep, getSweepById, mapSweep, requeryDue } from '../sweeps/engine';
 import { requeryWithdrawalsDue } from '../withdrawals/service';
 import { reconciliationReport } from '../reconciliation/report';
+import { analyzeMerchant, runSmartRate } from '../smart-rate/analyze';
 import { createSuggestion } from '../smart-rate/service';
 import { listActiveMerchants } from '../merchants/service';
 import { toWatDate } from '../time';
@@ -74,6 +75,12 @@ export function opsRoutes(app: FastifyInstance, deps: Deps): void {
     });
 
     ops.get('/reconciliation', async () => ok(await reconciliationReport(deps)));
+
+    // Run SmartRate now (all traders, or one). `file: false` only analyses and files nothing. The trader still has to say YES.
+    ops.post('/smart-rate/run', async (req) => {
+      const b = z.object({ merchantId: z.string().uuid().optional(), file: z.boolean().default(true) }).parse(req.body ?? {});
+      return ok(b.merchantId ? [analyzeMerchant(deps, b.merchantId, { file: b.file })] : b.file ? runSmartRate(deps) : listActiveMerchants(deps.db).map((m) => analyzeMerchant(deps, m.id, { file: false })));
+    });
 
     // SmartRate proposes a rate here. The trader still has to say YES.
     ops.post('/suggestions', async (req, reply) => {

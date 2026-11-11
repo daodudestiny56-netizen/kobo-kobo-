@@ -4,6 +4,7 @@ import { toWatDate } from '../time';
 import { runBatch } from './batch';
 import { requeryDue } from './engine';
 import { requeryWithdrawalsDue } from '../withdrawals/service';
+import { runSmartRate } from '../smart-rate/analyze';
 
 /**
  * 23:00 WAT sweep, 23:30 re-run (it IS the retry for anything that did not finish), and a requery loop every
@@ -20,6 +21,13 @@ export function startScheduler(deps: Deps): () => void {
       console.log(`[scheduler] sweep ${date}:`, JSON.stringify(r, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
     } catch (e) {
       console.error('[scheduler] sweep failed:', (e as Error).message);
+    }
+    // After the day's takings are in, SmartRate may suggest a new rate. The trader still has to say YES.
+    try {
+      const filed = runSmartRate(deps).filter((x) => x.suggestionId).length;
+      if (filed) console.log(`[scheduler] smart rate filed ${filed} suggestion(s)`);
+    } catch (e) {
+      console.error('[scheduler] smart rate failed:', (e as Error).message);
     }
   };
   const jobs = [

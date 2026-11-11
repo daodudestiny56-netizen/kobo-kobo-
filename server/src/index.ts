@@ -4,7 +4,8 @@ import { loadConfig, productionProblems } from './config';
 import { openDb } from './db';
 import { buildServer } from './server';
 import { SimulatedBank } from './bank/simulated';
-import { AllowAllGuard, ThresholdGuard } from './guard/port';
+import { ThresholdGuard } from './guard/port';
+import { StatisticalGuard } from './guard/statistical';
 import { startScheduler } from './sweeps/scheduler';
 
 const config = loadConfig();
@@ -18,7 +19,7 @@ if (config.dbPath !== ':memory:') mkdirSync(dirname(config.dbPath), { recursive:
 const db = openDb(config.dbPath);
 // Until the real Xtradot client lands, run against the in-memory simulated bank (same trigger amounts as the sandbox).
 const clock = () => new Date();
-const deps = { db, config, clock, bank: new SimulatedBank(clock), guard: config.guardHoldAboveNaira ? new ThresholdGuard(BigInt(config.guardHoldAboveNaira) * 100n) : new AllowAllGuard() };
+const deps = { db, config, clock, bank: new SimulatedBank(clock), guard: new StatisticalGuard(db, config.guardHoldAboveNaira ? new ThresholdGuard(BigInt(config.guardHoldAboveNaira) * 100n) : null) };
 console.warn('[boot] bank = SimulatedBank (no real bank calls)');
 const app = buildServer(deps);
 
