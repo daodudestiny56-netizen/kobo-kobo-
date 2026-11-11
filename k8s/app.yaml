@@ -26,7 +26,7 @@ spec:
       # imagePullSecrets: [{ name: regcred }]   # uncomment if the ghcr package is private
       containers:
         - name: app
-          image: ghcr.io/daodudestiny56-netizen/kobo-kobo:v3
+          image: ghcr.io/daodudestiny56-netizen/kobo-kobo:v4
           ports:
             - containerPort: 8080
           env:
@@ -34,6 +34,7 @@ spec:
             - { name: BANK_BASE_URL, value: "http://bank-api.ingress-apisix.svc.cluster.local/v1" }
             - { name: DB_PATH, value: "/data/kobo.sqlite" }
             - { name: DEMO_MODE, value: "1" }
+            - { name: DEMO_OPEN, value: "1" }  # demo only: remove after the demo and re-apply
           envFrom:
             - secretRef: { name: huawei-gateway, optional: true }
             - secretRef: { name: kobo-secrets }

@@ -21,4 +21,4 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/daodudestiny56-netizen/kobo-kobo:v3
+          tags: ghcr.io/daodudestiny56-netizen/kobo-kobo:v4
