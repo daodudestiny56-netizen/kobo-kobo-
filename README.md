@@ -108,11 +108,12 @@ The deployed backend is **one process**. The root app (`src/server.ts`) owns the
 | `src/webhooks/` | Signed receiver with replay protection and de-duplication, registered with the bank on boot. |
 | `src/pension/` | Creates the simulated pension account during onboarding, inside the same transaction. |
 | `src/migrations/` | Root database migrations, including the engine tables. |
-| `server/src/` | The engine: `split` (pure sweep maths), `sweeps` (engine, batch, scheduler, alerts), `ledger`, `withdrawals`, `channels` (USSD, SMS), `messages`, `guard`, `smart-rate`, `reconciliation`, `demo` (seed, clock), `routes`. |
+| `server/src/` | The engine: `split` (pure sweep maths), `sweeps` (engine, batch, scheduler, alerts), `ledger`, `withdrawals`, `channels` (USSD, SMS), `messages`, `guard` and `intel` (SweepGuard), `smart-rate` and `intel` (SmartRate), `reconciliation`, `demo` (seed, clock), `routes`, `web` (the response shapes the web app reads). |
 | `server/tests/`, `tests/` | Engine tests (Vitest) and root integration tests. |
 | `web/` | The Next.js web app. See [its README](web/README.md). |
+| `docker/entry.mjs` | The container's front door: one public port, routing `/api` and `/hooks` to the API and everything else to the web app. |
 | `k8s/`, `Dockerfile`, `.github/` | Deployment and CI. |
-| `kobo-core/` | An earlier design (Postgres, PIN, voice). Legacy, to be removed. |
+| `kobo_ai_kit/` | The Python reference implementation that SweepGuard and SmartRate were ported from (not used at runtime). |
 
 ## The bank we build on
 
@@ -249,6 +250,7 @@ cd web && npm run typecheck && npm run build
 | `DEMO_SECRET` | Shared key sent as `x-demo-key` for demo actions. |
 | `IDENTITY_HMAC_KEY` | Secret used to hash BVNs. Set it before onboarding anyone. |
 | `COLLECTION_ACCOUNT` | The stand-in pension collection account (default `0123456793`). |
+| `DEMO_UNENROLLED_ACCOUNTS` | Demo only: sandbox accounts the seed (boot and Reset demo) leaves un-enrolled, so a live sign-up can use them. The manifest sets `0123456792` (Efosa). |
 | `GUARD_HOLD_ABOVE_NAIRA` | Optional fixed ceiling that runs alongside the statistical SweepGuard: also hold any single credit at or above this amount. |
 | `SCHEDULER_ENABLED`, `SWEEP_CRON`, `SWEEP_RETRY_CRON`, `REQUERY_CRON` | Defaults: sweep at 23:00, retry at 23:30, requery every minute. |
 | `NEXT_PUBLIC_API_MODE`, `API_BASE_URL` (web) | `live` switches the web app to the real API. **Read at `next build`, not at start.** |
@@ -257,9 +259,10 @@ Never commit `GATEWAY_KEY`, the webhook secret, a kubeconfig or `.env`.
 
 ## Deployment
 
-- **Image.** The root `Dockerfile` builds the backend (Node 22, root app plus `server/src`). GitHub Actions (`.github/workflows`) runs the checks on every pull request and publishes `ghcr.io/daodudestiny56-netizen/kobo-kobo` on pushes to `main`.
+- **Image.** One image holds both halves. The root `Dockerfile` builds the web app in live mode (`NEXT_PUBLIC_API_MODE=live`, calling `/api/v1` on the same host) and the backend (Node 22, root app plus `server/src`). GitHub Actions (`.github/workflows`) runs the checks on every pull request and publishes `ghcr.io/daodudestiny56-netizen/kobo-kobo` on pushes to `main`. Pushing to `main` re-tags the current version, so use `[skip ci]` for a docs-only change if a rollout is under way.
 - **Cluster.** `k8s/app.yaml` deploys one replica as the public service `app` (port 80 to 8080) in the Forge namespace, with a 1 GiB volume for the database and secrets for the gateway key and the app's own keys. The sandbox allows one public service per team (`https://team07.xtradot.co`), 10 pods, and a small CPU and memory quota.
-- **The web app is not in that image yet.** It is a separate Next.js build. It needs `NEXT_PUBLIC_API_MODE=live` and `API_BASE_URL` set **as build arguments**, because both are fixed at build time.
+- **One public port.** `docker/entry.mjs` listens on 8080 and starts the API (internal 8081) and the web app (internal 3000). `/healthz` reports ready only when both answer, and the container stops if either dies, so Kubernetes restarts it. It handles SIGTERM so a rollout does not wait for a forced kill.
+- **Demo access.** `k8s/app.yaml` sets `DEMO_OPEN=1` so the ops and demo screens need no key. Remove it after the demo and re-apply.
 
 ## Security, privacy and compliance
 
@@ -302,13 +305,12 @@ Never commit `GATEWAY_KEY`, the webhook secret, a kubeconfig or `.env`.
 
 ## Status and known gaps
 
-As of 11 November 2026:
+As of 12 November 2026:
 
-- **The web app's live mode needs the "web contract" API change**, which adds the sign-in code, summary, feed, activity, demo sign-in and ops overview endpoints in the shapes the web app reads. It was written and tested against the real backend, but was **not yet merged** when this README was written. Until it is, only the mock mode and onboarding run end to end.
 - **SweepGuard and SmartRate** are statistics and rules, not models, and were calibrated on synthetic traders because no real merchant data exists yet. Every threshold is a named constant so it can be re-tuned on Access data. SweepGuard compares each credit with the trader's own last 30 sweep days (with absolute limits when history is thin) and holds out only the flagged credit. SmartRate runs after the nightly sweep and files a one-step suggestion that the trader must confirm. Look-alike duplicate detection (same sender, amount and narration within 5 minutes) is in the engine but needs the sender and narration from the bank feed, which the app does not store yet.
-- **The web app is not part of the deployed image.**
-- **`kobo-core/`** (the earlier design) should be removed, and parts of `docs/TEAM.md` describe an older API shape.
-- **Not yet verified:** the Docker build and cluster deploy of the combined app, and the smoke test against the live sandbox.
+- **Verified locally:** the full container layout (gateway, API and web app on one port) against the mock bank, with an end-to-end run of a payment, a sweep, the 50/50 split, the ledger, USSD and SMS, and SweepGuard holding a 3,000,000 naira credit. CI builds the image on every push to `main`.
+- **Not yet verified:** a rollout of the image on the cluster, the smoke test inside the pod, and a real sweep against the live sandbox bank. Some of `docs/TEAM.md` may describe an older API shape.
+- **Onboarding probe.** The duplicate check runs before BVN verification, so someone can learn whether an account or phone number is already enrolled without knowing the BVN. It is rate-limited (5 attempts a minute per address) and the message is generic.
 - **Phone verification** at sign-in uses a demo code.
 - **Languages:** Yoruba, Hausa and Igbo messages fall back to English.
 - **Legal pages** (terms, privacy) are drafts and have not been reviewed by a lawyer.
