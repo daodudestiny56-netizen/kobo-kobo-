@@ -35,6 +35,7 @@ spec:
             - { name: DB_PATH, value: "/data/kobo.sqlite" }
             - { name: DEMO_MODE, value: "1" }
             - { name: DEMO_OPEN, value: "1" }  # demo only: remove after the demo and re-apply
+            - { name: DEMO_UNENROLLED_ACCOUNTS, value: "0123456792" }  # demo only: leaves Efosa free for a live sign-up
           envFrom:
             - secretRef: { name: huawei-gateway, optional: true }
             - secretRef: { name: kobo-secrets }

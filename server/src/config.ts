@@ -25,7 +25,9 @@ export interface Config {
   collectionLabel: string;
   /** Optional bank accounts for the demo traders (comma separated in DEMO_BANK_ACCOUNTS), e.g. the sandbox individuals. */
   demoBankAccounts: string[];
-  /** Hold any single credit at or above this many naira (placeholder guard) when set. */
+  /** Sandbox accounts the demo seed leaves un-enrolled (DEMO_UNENROLLED_ACCOUNTS), so a live sign-up can use them. */
+  demoUnenrolledAccounts: string[];
+  /** Also hold any single credit at or above this many naira, alongside the statistical guard, when set. */
   guardHoldAboveNaira: number | null;
   scheduler: { enabled: boolean; sweepCron: string; retryCron: string; requeryCron: string };
   sweep: { batchConcurrency: number; defaultDailyCapKobo: number; defaultBufferKobo: number };
@@ -50,6 +52,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     collectionAccount: env.COLLECTION_ACCOUNT ?? '0123456793',
     collectionLabel: 'Access ARM collection (simulated)',
     demoBankAccounts: (env.DEMO_BANK_ACCOUNTS ?? '').split(',').map((x) => x.trim()).filter(Boolean),
+    demoUnenrolledAccounts: (env.DEMO_UNENROLLED_ACCOUNTS ?? '').split(',').map((x) => x.trim()).filter(Boolean),
     guardHoldAboveNaira: env.GUARD_HOLD_ABOVE_NAIRA ? int(env.GUARD_HOLD_ABOVE_NAIRA, 0) : null,
     scheduler: {
       enabled: bool(env.SCHEDULER_ENABLED, true),

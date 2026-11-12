@@ -77,7 +77,8 @@ export async function seedDemo(deps: Deps, now: Date = deps.clock()): Promise<Se
 
   // A real bank only knows the four sandbox individuals; the other personas need the simulated bank.
   const realBank = !(deps.bank instanceof SimulatedBank);
-  const personas = PERSONAS.filter((p) => p.sandbox || !realBank);
+  const left = new Set(config.demoUnenrolledAccounts);
+  const personas = PERSONAS.filter((p) => (p.sandbox || !realBank) && !(p.sandbox && left.has(p.sandbox.bankAccount)));
   let n = 0;
   for (const p of personas) {
     n++;

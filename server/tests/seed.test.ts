@@ -5,6 +5,8 @@ import { reconciliationReport } from '../src/reconciliation/report';
 import { merchantSummary } from '../src/merchants/summary';
 import { runBatch } from '../src/sweeps/batch';
 import { ThresholdGuard } from '../src/guard/port';
+import { loadConfig } from '../src/config';
+import { onboardMerchant } from '../src/merchants/service';
 import { makeDeps } from './helpers';
 import { toWatDate } from '../src/time';
 
@@ -43,5 +45,18 @@ describe('demo seed', () => {
     const first = count();
     await seedDemo(deps, now);
     expect(count()).toEqual(first);
+  }, 60_000);
+
+  it('leaves an account un-enrolled when asked, so a live sign-up can use it', async () => {
+    const now = new Date('2026-11-12T14:00:00Z');
+    const deps = makeDeps({ now, config: loadConfig({ LOG_LEVEL: 'silent', DEMO_UNENROLLED_ACCOUNTS: '0123456792' }) });
+    const r = await seedDemo(deps, now);
+    expect(r.personas).toHaveLength(PERSONAS.length - 1);
+    expect(r.personas.some((p) => p.key === 'efosa')).toBe(false);
+    expect(deps.db.prepare(`SELECT COUNT(*) n FROM merchants WHERE bank_account = '0123456792'`).get()).toEqual({ n: 0 });
+    expect(ledgerProblems(deps.db)).toEqual([]);
+    // the freed identity can now be enrolled for real
+    const efosa = PERSONAS.find((p) => p.key === 'efosa')!;
+    expect(() => onboardMerchant(deps.db, { phone: efosa.phone, fullName: efosa.name, bvn: efosa.sandbox!.bvn, bankAccount: '0123456792', language: 'en', at: now })).not.toThrow();
   }, 60_000);
 });
