@@ -33,7 +33,9 @@ export type OnboardInput = {
 };
 
 export async function onboard(b: OnboardInput) {
-  const phone = String(b.phone ?? "").replace(/[\s-]/g, "");
+  // Nigerian numbers are stored as +234XXXXXXXXXX: the form sign-in, USSD and SMS look a trader up by.
+  const typed = String(b.phone ?? "").replace(/[\s()-]/g, "");
+  const phone = /^0\d{10}$/.test(typed) ? `+234${typed.slice(1)}` : /^234\d{10}$/.test(typed) ? `+${typed}` : typed;
   if (!/^\+?\d{10,15}$/.test(phone)) throw new OnboardError("INVALID_REQUEST", 400, "phone must be 10 to 15 digits", "phone");
   const account = String(b.bankAccount ?? "");
   if (!/^\d{10}$/.test(account)) throw new OnboardError("INVALID_REQUEST", 400, "bankAccount must be 10 digits", "bankAccount");

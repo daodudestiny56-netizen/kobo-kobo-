@@ -8,7 +8,7 @@
     "build": "tsc",
     "start": "node --import tsx src/server.ts",
     "mockbank": "tsx src/mockbank/server.ts",
-    "test": "tsx --test tests/onboarding-pension.test.ts tests/engine-runtime.test.ts"
+    "test": "tsx --test tests/onboarding-pension.test.ts tests/engine-runtime.test.ts tests/onboarding-phone.test.ts"
   },
   "dependencies": {
     "@fastify/formbody": "^8.0.0",
